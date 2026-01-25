@@ -1,3 +1,0 @@
-2026-01-25 04:09:54,181 - INFO - Starting Stealth Scraper Test Suite...
-2026-01-25 04:09:54,181 - INFO - Testing Easy Target: http://books.toscrape.com/
-2026-01-25 04:09:56,583 - INFO - patching driver executable C:\Users\derip\appdata\roaming\undetected_chromedriver\undetected_chromedriver.exe
