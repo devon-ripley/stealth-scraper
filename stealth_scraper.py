@@ -647,12 +647,8 @@ class StealthBrowser:
         # EXPERIMENTAL OPTIONS
         # ========================================
         
-        options.add_experimental_option("excludeSwitches", [
-            "enable-automation",
-            "enable-logging",
-            "enable-blink-features=AutomationControlled",
-        ])
-        options.add_experimental_option("useAutomationExtension", False)
+
+
         
         prefs = {
             # Disable password manager
