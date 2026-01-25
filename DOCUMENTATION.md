@@ -244,6 +244,78 @@ config = StealthConfig(
 
 ---
 
+### ProxyConfig
+
+Configuration for DataImpulse rotating residential proxies with geotargeting support.
+
+```python
+from stealth_scraper import ProxyConfig
+
+config = ProxyConfig(
+    enabled=True,                      # Enable proxy usage
+    username="your_username",          # DataImpulse username
+    password="your_password",          # DataImpulse password
+    
+    # DataImpulse defaults (usually don't need to change)
+    host="gw.dataimpulse.com",         # Proxy host
+    port=823,                          # Proxy port
+    
+    # Geotargeting
+    country="us",                      # ISO country code
+    city="saltlakecity",               # Optional: city targeting (doubles rate)
+)
+```
+
+#### Parameter Details
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | bool | False | Enable/disable proxy usage |
+| `username` | str | "" | Your DataImpulse username |
+| `password` | str | "" | Your DataImpulse password |
+| `host` | str | "gw.dataimpulse.com" | DataImpulse proxy host |
+| `port` | int | 823 | DataImpulse proxy port |
+| `country` | str | "us" | ISO country code for geotargeting |
+| `city` | str | None | City name for city-level targeting (optional) |
+
+#### City Targeting Examples
+
+Common US cities (use lowercase, no spaces):
+- `newyork`, `losangeles`, `chicago`, `houston`, `phoenix`
+- `saltlakecity`, `sanfrancisco`, `seattle`, `denver`, `miami`
+
+> **Note:** City-level targeting doubles the rate (~$2/GB instead of ~$1/GB).
+
+#### Usage Example
+
+```python
+from stealth_scraper import StealthBrowser, ProxyConfig
+
+# Basic proxy with country targeting only (~$1/GB)
+proxy = ProxyConfig(
+    enabled=True,
+    username="your_username",
+    password="your_password",
+    country="us"
+)
+
+# Proxy with city targeting (~$2/GB)
+proxy_city = ProxyConfig(
+    enabled=True,
+    username="your_username", 
+    password="your_password",
+    country="us",
+    city="saltlakecity"
+)
+
+# Use with StealthBrowser
+with StealthBrowser(proxy_config=proxy_city) as browser:
+    browser.navigate("https://httpbin.org/ip")
+    print(browser.get_page_source())  # Should show proxy IP
+```
+
+---
+
 ## Core Classes
 
 ### StealthBrowser
@@ -256,6 +328,7 @@ The main class for stealth web scraping. Combines all anti-detection features wi
 browser = StealthBrowser(
     behavior_config: Optional[HumanBehaviorConfig] = None,
     stealth_config: Optional[StealthConfig] = None,
+    proxy_config: Optional[ProxyConfig] = None,
 )
 ```
 

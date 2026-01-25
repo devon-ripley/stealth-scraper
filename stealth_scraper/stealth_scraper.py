@@ -11,6 +11,7 @@ import platform
 from typing import Optional, Tuple, List, Callable, Any
 from dataclasses import dataclass, field
 from pathlib import Path
+import os
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -106,6 +107,31 @@ class StealthConfig:
     disable_notifications: bool = True
     disable_popup_blocking: bool = False
     use_selenium_stealth: bool = True  # Use selenium-stealth library
+
+
+@dataclass
+class ProxyConfig:
+    """Configuration for DataImpulse rotating residential proxies.
+    
+    DataImpulse proxy format:
+    - Host: gw.dataimpulse.com
+    - Port: 823
+    - Username format with targeting: username__cr.{country};city.{city}
+    
+    Pricing note: City-level targeting doubles the rate (~$2/GB vs ~$1/GB).
+    """
+    
+    enabled: bool = False
+    username: str = ""
+    password: str = ""
+    
+    # DataImpulse defaults
+    host: str = "gw.dataimpulse.com"
+    port: int = 823
+    
+    # Geotargeting
+    country: str = "us"  # ISO country code
+    city: Optional[str] = None  # e.g., "newyork", "losangeles", "saltlakecity"
 
 
 class BezierCurve:
@@ -504,13 +530,39 @@ class StealthBrowser:
         self,
         behavior_config: Optional[HumanBehaviorConfig] = None,
         stealth_config: Optional[StealthConfig] = None,
+        proxy_config: Optional['ProxyConfig'] = None,
     ):
         self.behavior_config = behavior_config or HumanBehaviorConfig()
         self.stealth_config = stealth_config or StealthConfig()
+        self.proxy_config = proxy_config
         self.driver: Optional[webdriver.Chrome] = None
         self.mouse: Optional[HumanMouseSimulator] = None
         self.scroll: Optional[HumanScrollSimulator] = None
         self.typing: Optional[HumanTypingSimulator] = None
+    
+    
+    def _build_proxy_url(self) -> str:
+        """Build DataImpulse proxy URL with geotargeting parameters.
+        
+        Format: http://username__cr.{country};city.{city}:password@host:port
+        """
+        if not self.proxy_config:
+            return ""
+        
+        # Build targeting string
+        targeting = f"cr.{self.proxy_config.country}"
+        if self.proxy_config.city:
+            # Normalize city name (lowercase, no spaces)
+            city = self.proxy_config.city.lower().replace(" ", "").replace("-", "")
+            targeting += f";city.{city}"
+        
+        # Build username with targeting
+        username_with_targeting = f"{self.proxy_config.username}__{targeting}"
+        
+        return (
+            f"http://{username_with_targeting}:{self.proxy_config.password}"
+            f"@{self.proxy_config.host}:{self.proxy_config.port}"
+        )
     
     def _get_stealth_options(self) -> Options:
         """Configure Chrome options for stealth."""
@@ -528,6 +580,9 @@ class StealthBrowser:
         # Disable automation indicators
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--disable-infobars")
+        
+        # Ignore SSL errors (often needed for proxies/interceptors)
+        options.add_argument("--ignore-certificate-errors")
         
         # Disable dev-shm for stability in containers
         options.add_argument("--disable-dev-shm-usage")
@@ -642,6 +697,13 @@ class StealthBrowser:
         
         if self.stealth_config.use_persistent_profile and self.stealth_config.profile_path:
             options.add_argument(f"--user-data-dir={self.stealth_config.profile_path}")
+        
+        # ========================================
+        # PROXY CONFIGURATION 
+        # ========================================
+        
+        # Proxy is handled via selenium-wire in start(), not here via extension
+        pass
         
         # ========================================
         # EXPERIMENTAL OPTIONS
@@ -1078,14 +1140,57 @@ class StealthBrowser:
         """Initialize the stealth browser."""
         options = self._get_stealth_options()
         
+        # Check if using proxy via selenium-wire
+        use_proxy = self.proxy_config and self.proxy_config.enabled
+        seleniumwire_options = {}
+        
+        if use_proxy:
+            proxy_url = self._build_proxy_url()
+            seleniumwire_options = {
+                'proxy': {
+                    'http': proxy_url,
+                    'https': proxy_url,
+                    'no_proxy': 'localhost,127.0.0.1'
+                }
+            }
+        
         if self.stealth_config.use_undetected_chrome:
-            self.driver = uc.Chrome(
-                options=options,
-                headless=False,
-                use_subprocess=True,
-            )
+            if use_proxy:
+                try:
+                    import seleniumwire.undetected_chromedriver as uc_wire
+                    self.driver = uc_wire.Chrome(
+                        options=options,
+                        seleniumwire_options=seleniumwire_options,
+                        headless=False,
+                        use_subprocess=True,
+                    )
+                except ImportError:
+                    print("⚠️  selenium-wire not found. Proxy configuration skipped.")
+                    # Fallback to standard uc
+                    self.driver = uc.Chrome(
+                        options=options,
+                        headless=False,
+                        use_subprocess=True,
+                    )
+            else:
+                self.driver = uc.Chrome(
+                    options=options,
+                    headless=False,
+                    use_subprocess=True,
+                )
         else:
-            self.driver = webdriver.Chrome(options=options)
+            if use_proxy:
+                try:
+                    from seleniumwire import webdriver as wire_webdriver
+                    self.driver = wire_webdriver.Chrome(
+                        options=options,
+                        seleniumwire_options=seleniumwire_options
+                    )
+                except ImportError:
+                    print("⚠️  selenium-wire not found. Proxy configuration skipped.")
+                    self.driver = webdriver.Chrome(options=options)
+            else:
+                self.driver = webdriver.Chrome(options=options)
         
         # Apply selenium-stealth if available and enabled
         if SELENIUM_STEALTH_AVAILABLE and self.stealth_config.use_selenium_stealth:
