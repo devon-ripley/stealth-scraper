@@ -233,6 +233,17 @@ class HumanMouseSimulator:
     
     def move_to(self, x: int, y: int, click: bool = False) -> None:
         """Move mouse to coordinates with human-like motion."""
+        # Get viewport dimensions for clamping
+        try:
+            viewport = self.driver.execute_script("return [window.innerWidth, window.innerHeight];")
+            max_x, max_y = viewport[0] - 1, viewport[1] - 1
+        except:
+            max_x, max_y = 1919, 1079  # Fallback
+            
+        # Clamp target
+        x = max(0, min(x, max_x))
+        y = max(0, min(y, max_y))
+        
         # Generate curved path
         path = BezierCurve.generate_curve(
             self.current_pos,
@@ -243,6 +254,9 @@ class HumanMouseSimulator:
         
         # Add jitter
         path = self._add_jitter(path)
+        
+        # Clamp path points to viewport
+        path = [(max(0, min(px, max_x)), max(0, min(py, max_y))) for px, py in path]
         
         # Calculate timing
         total_time = random.uniform(
@@ -259,6 +273,10 @@ class HumanMouseSimulator:
             dx = px - prev_x
             dy = py - prev_y
             
+            # Skip zero movements
+            if dx == 0 and dy == 0:
+                continue
+                
             self.actions.move_by_offset(dx, dy)
             prev_x, prev_y = px, py
             
@@ -269,16 +287,28 @@ class HumanMouseSimulator:
                 delay = base_delay * speed_factor * random.uniform(0.8, 1.2)
                 self.actions.pause(delay)
         
-        self.actions.perform()
-        self.current_pos = (x, y)
+        try:
+            self.actions.perform()
+            self.current_pos = (prev_x, prev_y)  # Update to actual final position
+        except Exception:
+            # Fallback if action chain fails - teleport to target to maintain state
+            self.current_pos = (x, y)
         
         # Possible overshoot and correction
         if random.random() < self.config.mouse_overshoot_chance:
             overshoot_x = x + random.randint(-20, 20)
             overshoot_y = y + random.randint(-15, 15)
-            self._micro_move(overshoot_x, overshoot_y)
-            time.sleep(random.uniform(0.1, 0.3))
-            self._micro_move(x, y)
+            
+            # Clamp overshoot
+            overshoot_x = max(0, min(overshoot_x, max_x))
+            overshoot_y = max(0, min(overshoot_y, max_y))
+            
+            try:
+                self._micro_move(overshoot_x, overshoot_y)
+                time.sleep(random.uniform(0.1, 0.3))
+                self._micro_move(x, y)
+            except:
+                pass
         
         if click:
             self._human_click()
