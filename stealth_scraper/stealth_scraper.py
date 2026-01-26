@@ -1186,22 +1186,13 @@ class StealthBrowser:
         
         if self.stealth_config.use_undetected_chrome:
             if use_proxy:
-                try:
-                    import seleniumwire.undetected_chromedriver as uc_wire
-                    self.driver = uc_wire.Chrome(
-                        options=options,
-                        seleniumwire_options=seleniumwire_options,
-                        headless=False,
-                        use_subprocess=True,
-                    )
-                except ImportError:
-                    print("⚠️  selenium-wire not found. Proxy configuration skipped.")
-                    # Fallback to standard uc
-                    self.driver = uc.Chrome(
-                        options=options,
-                        headless=False,
-                        use_subprocess=True,
-                    )
+                import seleniumwire.undetected_chromedriver as uc_wire
+                self.driver = uc_wire.Chrome(
+                    options=options,
+                    seleniumwire_options=seleniumwire_options,
+                    headless=False,
+                    use_subprocess=True,
+                )
             else:
                 self.driver = uc.Chrome(
                     options=options,
@@ -1210,15 +1201,11 @@ class StealthBrowser:
                 )
         else:
             if use_proxy:
-                try:
-                    from seleniumwire import webdriver as wire_webdriver
-                    self.driver = wire_webdriver.Chrome(
-                        options=options,
-                        seleniumwire_options=seleniumwire_options
-                    )
-                except ImportError:
-                    print("⚠️  selenium-wire not found. Proxy configuration skipped.")
-                    self.driver = webdriver.Chrome(options=options)
+                from seleniumwire import webdriver as wire_webdriver
+                self.driver = wire_webdriver.Chrome(
+                    options=options,
+                    seleniumwire_options=seleniumwire_options
+                )
             else:
                 self.driver = webdriver.Chrome(options=options)
         
