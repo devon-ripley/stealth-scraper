@@ -86,6 +86,75 @@ with StealthBrowser() as browser:
 
 ---
 
+## 🎚️ Preset Stealth Levels
+
+Don't want to configure everything manually? Use preset stealth levels:
+
+### Quick Start with Presets
+
+```python
+from stealth_scraper import StealthLevel, create_browser_with_level
+
+# LOW: Fast, minimal stealth (basic anti-detection only)
+with create_browser_with_level(StealthLevel.LOW) as browser:
+    browser.navigate("https://example.com")
+
+# MEDIUM: Balanced (recommended for most sites)
+with create_browser_with_level(StealthLevel.MEDIUM) as browser:
+    browser.navigate("https://example.com")
+
+# HIGH: Maximum stealth (slower but most human-like)
+with create_browser_with_level(StealthLevel.HIGH) as browser:
+    browser.navigate("https://example.com")
+```
+
+### Stealth Level Comparison
+
+| Feature | LOW | MEDIUM | HIGH |
+|---------|-----|--------|------|
+| **Speed** | Fast | Balanced | Slow |
+| **Mouse Speed** | 0.3-0.8s | 0.5-2.0s | 1.0-3.0s |
+| **Typing Speed** | 0.03-0.12s | 0.05-0.25s | 0.1-0.35s |
+| **Typos** | None | 2% | 3% |
+| **Random Pauses** | None | 10% | 20% |
+| **Page Load Wait** | 0.5-1.5s | 2.0-6.0s | 4.0-8.0s |
+| **Undetected Chrome** | ✓ | ✓ | ✓ |
+| **Selenium-Stealth** | ✗ | ✓ | ✓ |
+| **WebRTC Protection** | ✗ | ✓ | ✓ |
+| **Use Case** | Weak detection | Most sites | Strong detection |
+
+### With Custom Overrides
+
+```python
+# Start with a preset and add custom spoofing
+with create_browser_with_level(
+    StealthLevel.MEDIUM,
+    spoof_timezone="America/New_York",
+    spoof_geolocation=(40.7128, -74.0060),
+    spoof_locale="en-US"
+) as browser:
+    browser.navigate("https://example.com")
+```
+
+### Manual Configuration from Preset
+
+```python
+from stealth_scraper import get_stealth_config, StealthBrowser, StealthLevel
+
+# Get preset configurations
+behavior, stealth = get_stealth_config(StealthLevel.HIGH)
+
+# Modify as needed
+stealth.spoof_timezone = "Europe/London"
+behavior.reading_speed_wpm = 180
+
+# Use modified config
+with StealthBrowser(behavior_config=behavior, stealth_config=stealth) as browser:
+    browser.navigate("https://example.com")
+```
+
+---
+
 ## ⚙️ Configuration
 
 ### Human Behavior Settings
@@ -128,12 +197,12 @@ config = StealthConfig(
     use_undetected_chrome=True,
     mask_automation_indicators=True,
     disable_webrtc=True,
-    
+
     # Spoofing
     spoof_timezone="America/New_York",
     spoof_geolocation=(40.7128, -74.0060),
     spoof_locale="en-US",
-    
+
     # Session
     use_persistent_profile=True,
     profile_path="/path/to/profile",
@@ -144,9 +213,48 @@ with StealthBrowser(stealth_config=config) as browser:
     pass
 ```
 
+### Proxy Settings (DataImpulse)
+
+```python
+from stealth_scraper import StealthBrowser, ProxyConfig
+
+proxy = ProxyConfig(
+    enabled=True,
+    username="your_username",
+    password="your_password",
+    host="gw.dataimpulse.com",  # Default
+    port=823,                    # Default
+    country="us",                # ISO country code
+    city="newyork",              # Optional: city-level targeting (doubles cost)
+)
+
+with StealthBrowser(proxy_config=proxy) as browser:
+    # Your scraping code with rotating residential proxies
+    pass
+```
+
+**Note:** City-level targeting doubles the rate (~$2/GB vs ~$1/GB).
+
 ---
 
 ## 🎯 API Reference
+
+### Factory Functions
+
+| Function | Description |
+|----------|-------------|
+| `create_browser_with_level(level, proxy_config, **overrides)` | Create browser with preset stealth level |
+| `get_stealth_config(level)` | Get preset configs for manual modification |
+| `create_stealth_browser(**kwargs)` | Create browser with custom configuration |
+
+### StealthLevel Enum
+
+```python
+StealthLevel.LOW      # Fast, minimal stealth
+StealthLevel.MEDIUM   # Balanced (default)
+StealthLevel.HIGH     # Maximum stealth
+StealthLevel.PARANOID # Alias for HIGH
+```
 
 ### StealthBrowser
 
@@ -281,6 +389,8 @@ with StealthBrowser(stealth_config=config) as browser:
   numpy>=1.24.0
   scipy>=1.11.0
   selenium-stealth>=1.0.6
+  selenium-wire>=5.1.0
+  blinker<1.8
   ```
 
 ---
@@ -288,13 +398,18 @@ with StealthBrowser(stealth_config=config) as browser:
 ## 📁 Package Structure
 
 ```
-stealth_scraper/
-├── __init__.py          # Package exports
-├── stealth_scraper.py   # Main module
-├── examples.py          # Usage examples
-├── requirements.txt     # Dependencies
-├── README.md            # This file
-└── DOCUMENTATION.md     # Full API documentation
+stealth-scraper/
+├── stealth_scraper/     # Main package
+│   ├── __init__.py          # Package exports
+│   └── stealth_scraper.py   # Main implementation
+├── tests/
+│   └── test_suite.py        # Test suite
+├── examples.py              # Usage examples
+├── requirements.txt         # Dependencies
+├── pyproject.toml          # Package configuration
+├── README.md               # This file
+├── DOCUMENTATION.md        # Full API documentation
+└── LICENSE                 # MIT License
 ```
 
 ---

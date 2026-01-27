@@ -8,11 +8,14 @@ from .stealth_scraper import (
     HumanBehaviorConfig,
     StealthConfig,
     ProxyConfig,
+    StealthLevel,
     HumanMouseSimulator,
     HumanScrollSimulator,
     HumanTypingSimulator,
     BezierCurve,
     create_stealth_browser,
+    get_stealth_config,
+    create_browser_with_level,
 )
 
 __version__ = "1.0.0"
@@ -21,9 +24,12 @@ __all__ = [
     "HumanBehaviorConfig",
     "StealthConfig",
     "ProxyConfig",
+    "StealthLevel",
     "HumanMouseSimulator",
     "HumanScrollSimulator",
     "HumanTypingSimulator",
     "BezierCurve",
     "create_stealth_browser",
+    "get_stealth_config",
+    "create_browser_with_level",
 ]

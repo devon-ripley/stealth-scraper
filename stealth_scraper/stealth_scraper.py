@@ -11,6 +11,7 @@ import platform
 from typing import Optional, Tuple, List, Callable, Any
 from dataclasses import dataclass, field
 from pathlib import Path
+from enum import Enum
 import os
 
 from selenium import webdriver
@@ -37,6 +38,14 @@ try:
     SELENIUM_STEALTH_AVAILABLE = True
 except ImportError:
     SELENIUM_STEALTH_AVAILABLE = False
+
+
+class StealthLevel(Enum):
+    """Preset stealth levels for easy configuration."""
+    LOW = "low"          # Fast, minimal stealth - basic anti-detection only
+    MEDIUM = "medium"    # Balanced - good stealth with reasonable speed
+    HIGH = "high"        # Maximum stealth - slower but most human-like
+    PARANOID = "paranoid"  # Alias for HIGH
 
 
 @dataclass
@@ -1453,11 +1462,138 @@ class StealthBrowser:
 def create_stealth_browser(**kwargs) -> StealthBrowser:
     """Create a stealth browser with optional custom configuration."""
     behavior_config = HumanBehaviorConfig(**{
-        k: v for k, v in kwargs.items() 
+        k: v for k, v in kwargs.items()
         if hasattr(HumanBehaviorConfig, k)
     })
     stealth_config = StealthConfig(**{
-        k: v for k, v in kwargs.items() 
+        k: v for k, v in kwargs.items()
         if hasattr(StealthConfig, k)
     })
     return StealthBrowser(behavior_config, stealth_config)
+
+
+def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, StealthConfig]:
+    """
+    Get pre-configured stealth and behavior settings for a given level.
+
+    Args:
+        level: StealthLevel enum (LOW, MEDIUM, HIGH, or PARANOID)
+
+    Returns:
+        Tuple of (HumanBehaviorConfig, StealthConfig)
+
+    Examples:
+        >>> behavior, stealth = get_stealth_config(StealthLevel.HIGH)
+        >>> browser = StealthBrowser(behavior_config=behavior, stealth_config=stealth)
+    """
+    if level in (StealthLevel.LOW, "low"):
+        # Fast, minimal stealth - basic anti-detection only
+        behavior = HumanBehaviorConfig(
+            min_mouse_speed=0.3,
+            max_mouse_speed=0.8,
+            mouse_curve_intensity=0.2,
+            mouse_overshoot_chance=0.05,
+            min_typing_delay=0.03,
+            max_typing_delay=0.12,
+            typo_chance=0.0,
+            min_action_pause=0.2,
+            max_action_pause=0.8,
+            random_pause_chance=0.0,
+            reading_speed_wpm=350,
+        )
+
+        stealth = StealthConfig(
+            use_undetected_chrome=True,
+            mask_automation_indicators=True,
+            disable_webrtc=False,
+            use_selenium_stealth=False,
+            randomize_viewport=False,
+            randomize_request_timing=False,
+            min_page_load_wait=0.5,
+            max_page_load_wait=1.5,
+        )
+
+    elif level in (StealthLevel.MEDIUM, "medium"):
+        # Balanced - good stealth with reasonable speed (use defaults)
+        behavior = HumanBehaviorConfig()
+        stealth = StealthConfig()
+
+    elif level in (StealthLevel.HIGH, StealthLevel.PARANOID, "high", "paranoid"):
+        # Maximum stealth - slower but most human-like
+        behavior = HumanBehaviorConfig(
+            min_mouse_speed=1.0,
+            max_mouse_speed=3.0,
+            mouse_curve_intensity=0.4,
+            mouse_overshoot_chance=0.25,
+            mouse_jitter=True,
+            min_typing_delay=0.1,
+            max_typing_delay=0.35,
+            typo_chance=0.03,
+            min_action_pause=0.5,
+            max_action_pause=3.0,
+            random_pause_chance=0.2,
+            random_pause_duration=(3.0, 10.0),
+            reading_speed_wpm=200,
+            reading_variance=0.4,
+        )
+
+        stealth = StealthConfig(
+            use_undetected_chrome=True,
+            randomize_viewport=True,
+            mask_automation_indicators=True,
+            randomize_request_timing=True,
+            min_page_load_wait=4.0,
+            max_page_load_wait=8.0,
+            disable_webrtc=True,
+            disable_notifications=True,
+            use_selenium_stealth=True,
+        )
+    else:
+        raise ValueError(f"Invalid stealth level: {level}. Use StealthLevel.LOW, MEDIUM, HIGH, or PARANOID")
+
+    return behavior, stealth
+
+
+def create_browser_with_level(
+    level: StealthLevel,
+    proxy_config: Optional[ProxyConfig] = None,
+    **overrides
+) -> StealthBrowser:
+    """
+    Create a stealth browser with a preset stealth level.
+
+    Args:
+        level: StealthLevel enum (LOW, MEDIUM, HIGH, or PARANOID)
+        proxy_config: Optional ProxyConfig for proxy settings
+        **overrides: Additional config overrides (e.g., spoof_timezone="America/New_York")
+
+    Returns:
+        Configured StealthBrowser instance
+
+    Examples:
+        >>> # Simple usage with preset level
+        >>> with create_browser_with_level(StealthLevel.HIGH) as browser:
+        ...     browser.navigate("https://example.com")
+
+        >>> # With custom overrides
+        >>> with create_browser_with_level(
+        ...     StealthLevel.MEDIUM,
+        ...     spoof_timezone="Europe/London",
+        ...     spoof_geolocation=(51.5074, -0.1278)
+        ... ) as browser:
+        ...     browser.navigate("https://example.com")
+    """
+    behavior, stealth = get_stealth_config(level)
+
+    # Apply overrides to stealth config
+    for key, value in overrides.items():
+        if hasattr(stealth, key):
+            setattr(stealth, key, value)
+        elif hasattr(behavior, key):
+            setattr(behavior, key, value)
+
+    return StealthBrowser(
+        behavior_config=behavior,
+        stealth_config=stealth,
+        proxy_config=proxy_config
+    )
