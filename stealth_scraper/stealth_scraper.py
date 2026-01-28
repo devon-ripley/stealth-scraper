@@ -58,6 +58,7 @@ class HumanBehaviorConfig:
     mouse_curve_intensity: float = 0.3  # How curved the mouse path is
     mouse_overshoot_chance: float = 0.15  # Chance to overshoot target
     mouse_jitter: bool = True  # Add small random movements
+    hesitation_chance: float = 0.0  # Chance to hesitate before clicking
     
     # Scrolling settings
     scroll_style: str = "smooth"  # smooth, stepped, or mixed
@@ -79,6 +80,7 @@ class HumanBehaviorConfig:
     # Reading simulation
     reading_speed_wpm: int = 250  # Words per minute
     reading_variance: float = 0.3
+    text_selection_chance: float = 0.0  # Chance to select text while reading
 
 
 @dataclass  
@@ -302,6 +304,10 @@ class HumanMouseSimulator:
         except Exception:
             # Fallback if action chain fails - teleport to target to maintain state
             self.current_pos = (x, y)
+            
+        # Hesitation (Paranoid mode)
+        if random.random() < self.config.hesitation_chance:
+            self._perform_hesitation()
         
         # Possible overshoot and correction
         if random.random() < self.config.mouse_overshoot_chance:
@@ -345,6 +351,22 @@ class HumanMouseSimulator:
         self.actions.perform()
         
         # Post-click pause
+        time.sleep(random.uniform(0.1, 0.3))
+
+    def _perform_hesitation(self) -> None:
+        """Perform a hesitation movement (stop, micro-move, wait)."""
+        time.sleep(random.uniform(0.1, 0.4))
+        
+        # Small random movement nearby
+        offset_x = random.randint(-10, 10)
+        offset_y = random.randint(-10, 10)
+        
+        self.actions.reset_actions()
+        self.actions.move_by_offset(offset_x, offset_y)
+        self.actions.pause(random.uniform(0.2, 0.5))
+        self.actions.move_by_offset(-offset_x, -offset_y) # Return roughly
+        self.actions.perform()
+        
         time.sleep(random.uniform(0.1, 0.3))
     
     def move_to_element(self, element, click: bool = False) -> None:
@@ -1155,6 +1177,51 @@ class StealthBrowser:
             get: () => 'default',
             configurable: true
         });
+
+        // ========================================
+        // FONT MASKING
+        // ========================================
+        
+        // Mask font enumeration to prevent OS fingerprinting via fonts
+        if (window.queryLocalFonts) {
+            window.queryLocalFonts = async () => {
+                return [
+                    { family: "Arial", fullName: "Arial", postscriptName: "Arial" },
+                    { family: "Times New Roman", fullName: "Times New Roman", postscriptName: "TimesNewRoman" },
+                    { family: "Courier New", fullName: "Courier New", postscriptName: "CourierNew" },
+                    { family: "Verdana", fullName: "Verdana", postscriptName: "Verdana" },
+                    { family: "Georgia", fullName: "Georgia", postscriptName: "Georgia" },
+                    { family: "Palatino", fullName: "Palatino", postscriptName: "Palatino" },
+                    { family: "Garamond", fullName: "Garamond", postscriptName: "Garamond" },
+                    { family: "Bookman", fullName: "Bookman", postscriptName: "Bookman" },
+                    { family: "Comic Sans MS", fullName: "Comic Sans MS", postscriptName: "ComicSansMS" },
+                    { family: "Trebuchet MS", fullName: "Trebuchet MS", postscriptName: "TrebuchetMS" },
+                    { family: "Arial Black", fullName: "Arial Black", postscriptName: "ArialBlack" },
+                    { family: "Impact", fullName: "Impact", postscriptName: "Impact" }
+                ];
+            };
+        }
+        
+        // ========================================
+        // SCREEN PROPS RANDOMIZATION
+        // ========================================
+        
+        // Add slight noise to screen dimensions to match window or randomized values
+        // This runs after the initial screen prop definition
+        
+        const updateScreenProps = () => {
+            const width = window.innerWidth + Math.floor(Math.random() * 200);
+            const height = window.innerHeight + Math.floor(Math.random() * 100);
+            
+            try {
+                Object.defineProperty(screen, 'width', { get: () => width });
+                Object.defineProperty(screen, 'height', { get: () => height });
+                Object.defineProperty(screen, 'availWidth', { get: () => width });
+                Object.defineProperty(screen, 'availHeight', { get: () => height - 40 }); // Taskbar
+            } catch (e) {}
+        };
+        updateScreenProps();
+
         
         console.log = (function(old_console_log) {
             return function() {
@@ -1417,6 +1484,46 @@ class StealthBrowser:
             
             if elapsed < reading_time:
                 self.scroll.scroll_page("down", random.uniform(0.3, 0.7))
+                
+                # Random text selection (Paranoid mode)
+                if (hasattr(self.behavior_config, 'text_selection_chance') and 
+                    random.random() < self.behavior_config.text_selection_chance):
+                    self._perform_random_text_selection()
+    
+    def _perform_random_text_selection(self) -> None:
+        """Randomly select some text on the page."""
+        try:
+            # Find paragraphs
+            paragraphs = self.driver.find_elements(By.TAG_NAME, "p")
+            if not paragraphs:
+                return
+                
+            target = random.choice(paragraphs)
+            if not target.is_displayed():
+                return
+                
+            # Move to element
+            self.mouse.move_to_element(target)
+            
+            # Click and drag to select
+            self.mouse.actions.reset_actions()
+            self.mouse.actions.click_and_hold()
+            self.mouse.actions.move_by_offset(random.randint(20, 100), random.randint(0, 10))
+            self.mouse.actions.pause(random.uniform(0.5, 1.5))
+            self.mouse.actions.release()
+            self.mouse.actions.perform()
+            
+            # Pause to "read" selected text
+            time.sleep(random.uniform(1.0, 3.0))
+            
+            # Click elsewhere to deselect
+            self.mouse.move_to(
+                random.randint(100, 500), 
+                random.randint(100, 500), 
+                click=True
+            )
+        except:
+            pass
     
     def random_mouse_movement(self) -> None:
         """Make random mouse movements on the page."""
@@ -1515,10 +1622,14 @@ def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, Stealt
 
     elif level in (StealthLevel.MEDIUM, "medium"):
         # Balanced - good stealth with reasonable speed (use defaults)
-        behavior = HumanBehaviorConfig()
-        stealth = StealthConfig()
+        behavior = HumanBehaviorConfig(
+            hesitation_chance=0.01,
+        )
+        stealth = StealthConfig(
+            min_page_load_wait=1.0,
+        )
 
-    elif level in (StealthLevel.HIGH, StealthLevel.PARANOID, "high", "paranoid"):
+    elif level in (StealthLevel.HIGH, "high"):
         # Maximum stealth - slower but most human-like
         behavior = HumanBehaviorConfig(
             min_mouse_speed=1.0,
@@ -1535,6 +1646,8 @@ def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, Stealt
             random_pause_duration=(3.0, 10.0),
             reading_speed_wpm=200,
             reading_variance=0.4,
+            hesitation_chance=0.10,
+            text_selection_chance=0.05,
         )
 
         stealth = StealthConfig(
@@ -1547,6 +1660,40 @@ def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, Stealt
             disable_webrtc=True,
             disable_notifications=True,
             use_selenium_stealth=True,
+        )
+    
+    elif level in (StealthLevel.PARANOID, "paranoid"):
+        # Paranoid - Extreme stealth, forced headful
+        behavior = HumanBehaviorConfig(
+            min_mouse_speed=1.5,
+            max_mouse_speed=4.0,
+            mouse_curve_intensity=0.6,
+            mouse_overshoot_chance=0.4,
+            mouse_jitter=True,
+            hesitation_chance=0.3,
+            min_typing_delay=0.15,
+            max_typing_delay=0.40,
+            typo_chance=0.05,
+            min_action_pause=1.0,
+            max_action_pause=4.0,
+            random_pause_chance=0.3,
+            random_pause_duration=(4.0, 12.0),
+            reading_speed_wpm=150,
+            reading_variance=0.5,
+            text_selection_chance=0.2,
+        )
+
+        stealth = StealthConfig(
+            use_undetected_chrome=True,
+            randomize_viewport=True,
+            mask_automation_indicators=True,
+            randomize_request_timing=True,
+            min_page_load_wait=5.0,
+            max_page_load_wait=10.0,
+            disable_webrtc=True,
+            disable_notifications=True,
+            use_selenium_stealth=True,
+            block_images=False, # Images needed for realistic rendering
         )
     else:
         raise ValueError(f"Invalid stealth level: {level}. Use StealthLevel.LOW, MEDIUM, HIGH, or PARANOID")
