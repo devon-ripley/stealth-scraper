@@ -14,6 +14,9 @@ from pathlib import Path
 from enum import Enum
 import os
 
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service as ChromeService
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -1261,29 +1264,49 @@ class StealthBrowser:
             }
         
         if self.stealth_config.use_undetected_chrome:
-            if use_proxy:
-                import seleniumwire.undetected_chromedriver as uc_wire
-                self.driver = uc_wire.Chrome(
-                    options=options,
-                    seleniumwire_options=seleniumwire_options,
-                    headless=False,
-                    use_subprocess=True,
-                )
-            else:
-                self.driver = uc.Chrome(
-                    options=options,
-                    headless=False,
-                    use_subprocess=True,
-                )
+            try:
+                # Use webdriver_manager to get the definitely-correct driver path
+                driver_path = ChromeDriverManager().install()
+                
+                if use_proxy:
+                    import seleniumwire.undetected_chromedriver as uc_wire
+                    self.driver = uc_wire.Chrome(
+                        options=options,
+                        seleniumwire_options=seleniumwire_options,
+                        headless=False, # UC often requires headless=False
+                        use_subprocess=True,
+                        driver_executable_path=driver_path,
+                    )
+                else:
+                    self.driver = uc.Chrome(
+                        options=options,
+                        headless=False,
+                        use_subprocess=True,
+                        driver_executable_path=driver_path,
+                    )
+            except Exception as e:
+                # If UC fails (often due to version mismatch), log it and try to clean up
+                print(f"Error initializing undetected_chromedriver: {e}")
+                print("Attempting to clean up and retry...")
+                try:
+                    if self.driver:
+                        self.driver.quit()
+                except:
+                    pass
+                raise e
         else:
             if use_proxy:
                 from seleniumwire import webdriver as wire_webdriver
                 self.driver = wire_webdriver.Chrome(
+                    service=ChromeService(ChromeDriverManager().install()),
                     options=options,
                     seleniumwire_options=seleniumwire_options
                 )
             else:
-                self.driver = webdriver.Chrome(options=options)
+                self.driver = webdriver.Chrome(
+                    service=ChromeService(ChromeDriverManager().install()),
+                    options=options
+                )
         
         # Apply selenium-stealth if available and enabled
         if SELENIUM_STEALTH_AVAILABLE and self.stealth_config.use_selenium_stealth:
