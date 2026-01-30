@@ -18,8 +18,10 @@ from fake_useragent import UserAgent
 
 from .config import (
     StealthLevel, CustomStealthLevel, StealthIdentity, StealthLocation,
-    StealthConfig, HumanBehaviorConfig, ProxyConfig
+    StealthConfig, HumanBehaviorConfig,
 )
+from .proxy import Proxy, ProxyConfig, ProxyManager
+from .proxy.config import ProxyInput
 from .simulators.mouse import HumanMouseSimulator
 from .simulators.scroll import HumanScrollSimulator
 from .simulators.keyboard import HumanTypingSimulator
@@ -34,53 +36,44 @@ except ImportError:
 
 class StealthBrowser:
     """Main stealth browser class with anti-detection measures."""
-    
+
     def __init__(
         self,
         behavior_config: Optional['HumanBehaviorConfig'] = None,
         stealth_config: Optional['StealthConfig'] = None,
-        proxy_config: Optional['ProxyConfig'] = None,
+        proxy: Optional[ProxyInput] = None,
     ):
         """
         Initialize the stealth browser.
-        
+
         Args:
             behavior_config: Configuration for human behavior simulation
             stealth_config: Configuration for browser fingerprinting/stealth
-            proxy_config: Configuration for rotating proxies
+            proxy: Proxy configuration - can be:
+                - str: Proxy URL (e.g., "http://user:pass@host:8080")
+                - Proxy: Single proxy instance
+                - ProxyConfig: Full configuration with rotation
         """
         self.behavior_config = behavior_config or HumanBehaviorConfig()
         self.stealth_config = stealth_config or StealthConfig()
-        self.proxy_config = proxy_config
+        self._proxy_manager = ProxyManager.from_input(proxy)
         self.driver = None
         self.mouse: Optional[HumanMouseSimulator] = None
         self.scroll: Optional[HumanScrollSimulator] = None
         self.typing: Optional[HumanTypingSimulator] = None
+
+        # Apply location sync if enabled
+        if self._proxy_manager and self._proxy_manager.sync_location:
+            synced_location = self._proxy_manager.get_synced_location()
+            if synced_location and not self.stealth_config.location:
+                self.stealth_config.location = synced_location
     
     
-    def _build_proxy_url(self) -> str:
-        """Build DataImpulse proxy URL with geotargeting parameters.
-        
-        Format: http://username__cr.{country};city.{city}:password@host:port
-        """
-        if not self.proxy_config:
-            return ""
-        
-        # Build targeting string
-        targeting = f"cr.{self.proxy_config.country}"
-        if self.proxy_config.city:
-            # Normalize city name (lowercase, no spaces)
-            city = self.proxy_config.city.lower().replace(" ", "").replace("-", "")
-            targeting += f";city.{city}"
-        
-        # Build username with targeting
-        username_with_targeting = f"{self.proxy_config.username}__{targeting}"
-        
-        return (
-            f"http://{username_with_targeting}:{self.proxy_config.password}"
-            f"@{self.proxy_config.host}:{self.proxy_config.port}"
-        )
-    
+    @property
+    def proxy_manager(self) -> Optional[ProxyManager]:
+        """Get the proxy manager instance."""
+        return self._proxy_manager
+
     def _get_stealth_options(self) -> Options:
         """Configure Chrome options for stealth."""
         options = Options()
@@ -170,7 +163,7 @@ class StealthBrowser:
         options.add_argument("--disable-component-update")
         options.add_argument("--disable-default-apps")
         options.add_argument("--disable-domain-reliability")
-        options.add_argument("--disable-extensions")
+        # Note: --disable-extensions is conditionally added below (after proxy check)
         options.add_argument("--disable-hang-monitor")
         options.add_argument("--disable-ipc-flooding-protection")
         options.add_argument("--disable-popup-blocking")
@@ -224,12 +217,27 @@ class StealthBrowser:
             options.add_argument(f"--user-data-dir={self.stealth_config.profile_path}")
         
         # ========================================
-        # PROXY CONFIGURATION 
+        # PROXY CONFIGURATION
         # ========================================
-        
-        # Proxy is handled via selenium-wire in start(), not here via extension
-        pass
-        
+
+        # Create proxy extension if using authenticated proxy
+        _using_proxy_extension = False
+        if self._proxy_manager and self._proxy_manager.enabled:
+            # Create extension for authenticated proxies
+            ext_path = self._proxy_manager.create_extension()
+            if ext_path:
+                options.add_argument(f"--load-extension={ext_path}")
+                _using_proxy_extension = True
+            else:
+                # Non-auth proxy: use --proxy-server flag
+                proxy = self._proxy_manager.current_proxy
+                if proxy:
+                    options.add_argument(f"--proxy-server={proxy.url_no_auth}")
+
+        # Disable extensions only if we're not using proxy extension
+        if not _using_proxy_extension:
+            options.add_argument("--disable-extensions")
+
         # ========================================
         # EXPERIMENTAL OPTIONS
         # ========================================
@@ -534,6 +542,14 @@ class StealthBrowser:
 
     def navigate(self, url: str) -> None:
         """Navigate to a URL with human-like timing."""
+        # Check for timed proxy rotation before navigation
+        if self._proxy_manager:
+            self._proxy_manager.increment_request_count()
+            if self._proxy_manager.check_and_rotate():
+                # Proxy was rotated - note: full rotation requires browser restart
+                # This is a limitation; timed rotation works best with PER_SESSION
+                pass
+
         self.driver.get(url)
         # Random post-load wait
         time.sleep(random.uniform(
@@ -766,14 +782,18 @@ class StealthBrowser:
         self.driver.save_screenshot(path)
     
     def close(self) -> None:
-        """Close the browser."""
+        """Close the browser and cleanup resources."""
         if self.driver:
             self.driver.quit()
             self.driver = None
-    
+
+        # Cleanup proxy extension temp files
+        if self._proxy_manager:
+            self._proxy_manager.cleanup()
+
     def __enter__(self) -> 'StealthBrowser':
         return self.start()
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
@@ -784,44 +804,50 @@ def create_stealth_browser(
     location: Optional[StealthLocation] = None,
     headless: Optional[bool] = None,
     block_resources: Optional[bool] = None,
+    proxy: Optional[ProxyInput] = None,
     **kwargs
 ) -> StealthBrowser:
     """
     Factory function to create a configured StealthBrowser.
-    
+
     Args:
         level: Stealth behavior/security level.
         identity: Identity strategy (GHOST/CONSISTENT).
         location: Location context (US, UK, Tokyo, etc).
         headless: Run without UI. If None, uses level config.
         block_resources: Block images/CSS/fonts. If None, uses level config.
+        proxy: Proxy configuration - can be:
+            - str: Proxy URL (e.g., "http://user:pass@host:8080")
+            - Proxy: Single proxy instance
+            - ProxyConfig: Full configuration with rotation
         **kwargs: Overrides for specific config fields.
     """
     behavior, stealth = get_stealth_config(level)
-    
+
     # helper: apply override if provided, otherwise respect config (from level)
     if identity is not None:
         stealth.identity = identity
-        
+
     if location is not None:
         stealth.location = location
-    
+
     if headless is not None:
         stealth.headless = headless
-    
+
     if block_resources is not None:
         stealth.block_resources = block_resources
-        
+
     # Apply direct field overrides from kwargs
     for k, v in kwargs.items():
         if hasattr(behavior, k):
             setattr(behavior, k, v)
         elif hasattr(stealth, k):
             setattr(stealth, k, v)
-    
+
     return StealthBrowser(
         behavior_config=behavior,
         stealth_config=stealth,
+        proxy=proxy,
     )
 
 
@@ -836,6 +862,11 @@ def create_browser_with_level(
 def get_stealth_config(level: Union[StealthLevel, CustomStealthLevel]) -> Tuple[HumanBehaviorConfig, StealthConfig]:
     """
     Get pre-configured stealth and behavior settings for a given level.
+
+    Stealth level progressions:
+    - Mouse overshoot: FAST=N/A, LOW=0.05, MEDIUM=0.15, HIGH=0.25, PARANOID=0.4
+    - Random pauses: FAST=0.0, LOW=0.02, MEDIUM=0.05, HIGH=0.15, PARANOID=0.25
+    - Reading speed (WPM): FAST=N/A, LOW=350, MEDIUM=250, HIGH=220, PARANOID=180
     """
     # Handle CustomStealthLevel
     if isinstance(level, CustomStealthLevel):
@@ -861,7 +892,9 @@ def get_stealth_config(level: Union[StealthLevel, CustomStealthLevel]) -> Tuple[
             typo_chance=0.0,
             min_action_pause=0.2,
             max_action_pause=0.8,
-            random_pause_chance=0.0,
+            random_pause_chance=0.02,
+            random_pause_duration=(0.5, 1.5),
+            hesitation_chance=0.0,
             reading_speed_wpm=350,
         )
 
@@ -882,12 +915,15 @@ def get_stealth_config(level: Union[StealthLevel, CustomStealthLevel]) -> Tuple[
             min_mouse_speed=0.4,
             max_mouse_speed=1.0,
             mouse_curve_intensity=0.3,
+            mouse_overshoot_chance=0.15,
             min_typing_delay=0.05,
             max_typing_delay=0.15,
             typo_chance=0.005,
             min_action_pause=0.4,
             max_action_pause=1.2,
+            random_pause_chance=0.05,
             hesitation_chance=0.01,
+            reading_speed_wpm=250,
         )
         stealth = StealthConfig(
             use_undetected_chrome=True,
@@ -966,6 +1002,7 @@ def get_stealth_config(level: Union[StealthLevel, CustomStealthLevel]) -> Tuple[
         behavior = HumanBehaviorConfig(
             min_mouse_speed=0.0,
             max_mouse_speed=0.0, # Teleport
+            mouse_overshoot_chance=0.0,  # No overshoot in teleport mode
             min_typing_delay=0.0,
             max_typing_delay=0.0,
             typo_chance=0.0,

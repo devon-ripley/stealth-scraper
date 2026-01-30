@@ -61,3 +61,105 @@ Accessible via `browser.typing`.
 
 ### `type_text(element, text, clear_first=True)`
 Types into an element with variable delays and typos.
+
+---
+
+## Proxy Classes
+
+### Proxy
+
+Single proxy definition.
+
+```python
+from stealth_scraper import Proxy, ProxyType
+
+proxy = Proxy(
+    host="proxy.example.com",
+    port=8080,
+    proxy_type=ProxyType.HTTP,  # HTTP, HTTPS, SOCKS5
+    username="user",
+    password="pass",
+    country="US",  # For geo-sync
+)
+```
+
+#### Properties
+- `requires_auth` - Returns `True` if proxy has credentials
+- `url` - Full proxy URL with credentials
+- `url_no_auth` - Proxy URL without credentials (for logging)
+
+#### Class Methods
+- `Proxy.from_url(url, country=None)` - Parse proxy from URL string
+
+### ProxyConfig
+
+Full proxy configuration.
+
+```python
+from stealth_scraper import ProxyConfig, RotationStrategy
+
+config = ProxyConfig(
+    enabled=True,
+    proxy=proxy,  # Single proxy
+    # OR proxy_pool=pool,  # Multiple proxies
+    rotation_strategy=RotationStrategy.PER_SESSION,
+    sync_location=True,  # Auto-match timezone/locale
+)
+```
+
+#### Methods
+- `get_current_proxy()` - Get active proxy
+- `rotate()` - Move to next proxy in pool
+
+#### Class Methods
+- `ProxyConfig.from_url(url, **kwargs)` - Create config from URL string
+
+### ProxyPool
+
+Pool of proxies for rotation.
+
+```python
+from stealth_scraper import ProxyPool, Proxy
+
+pool = ProxyPool([
+    Proxy(host="proxy1.com", port=8080),
+    Proxy(host="proxy2.com", port=8080),
+])
+
+pool.get_current()  # Get current proxy
+pool.rotate()       # Move to next proxy
+pool.reset()        # Reset to first proxy
+```
+
+### RotationStrategy Enum
+
+```python
+from stealth_scraper import RotationStrategy
+
+RotationStrategy.NONE        # No rotation
+RotationStrategy.PER_SESSION # New proxy each session
+RotationStrategy.TIMED       # Rotate after interval
+RotationStrategy.ON_ERROR    # Rotate on failure
+```
+
+### ProxyType Enum
+
+```python
+from stealth_scraper import ProxyType
+
+ProxyType.HTTP    # HTTP proxy
+ProxyType.HTTPS   # HTTPS proxy
+ProxyType.SOCKS5  # SOCKS5 proxy
+```
+
+### ProxyManager
+
+Internal manager for proxy lifecycle (usually not used directly).
+
+```python
+from stealth_scraper import ProxyManager
+
+# Access via browser
+browser.proxy_manager.current_proxy
+browser.proxy_manager.get_synced_location()
+```

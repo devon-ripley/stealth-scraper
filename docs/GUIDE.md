@@ -91,13 +91,63 @@ with StealthBrowser() as browser:
 ```python
 with StealthBrowser() as browser:
     browser.navigate("https://example.com/feed")
-    
+
     for i in range(10):
         # Human-like scrolling
         browser.scroll.scroll_page("down", 0.8)
         browser.random_pause(1.0, 3.0)
-        
+
         # Occasional scroll back up (humans do this)
         if i % 3 == 0:
             browser.scroll.scroll_page("up", 0.2)
+```
+
+### 3. Using Proxies
+```python
+from stealth_scraper import create_stealth_browser, Proxy, ProxyConfig
+
+# Simple: URL string
+with create_stealth_browser(proxy="http://user:pass@proxy.example.com:8080") as browser:
+    browser.navigate("https://httpbin.org/ip")
+    print(browser.get_page_source())  # Shows proxy IP
+
+# With geo-location sync
+proxy = Proxy(
+    host="us.proxy.com",
+    port=8080,
+    country="US",
+    username="user",
+    password="pass"
+)
+config = ProxyConfig(enabled=True, proxy=proxy, sync_location=True)
+
+with create_stealth_browser(proxy=config) as browser:
+    # Browser timezone/locale automatically set to US
+    browser.navigate("https://example.com")
+```
+
+### 4. Proxy Rotation
+```python
+from stealth_scraper import create_stealth_browser, Proxy, ProxyConfig, ProxyPool, RotationStrategy
+
+# Create pool of proxies
+pool = ProxyPool([
+    Proxy(host="proxy1.com", port=8080, country="US"),
+    Proxy(host="proxy2.com", port=8080, country="GB"),
+    Proxy(host="proxy3.com", port=8080, country="DE"),
+])
+
+config = ProxyConfig(
+    enabled=True,
+    proxy_pool=pool,
+    rotation_strategy=RotationStrategy.PER_SESSION,
+    sync_location=True
+)
+
+# Each browser session uses next proxy in pool
+for i in range(3):
+    with create_stealth_browser(proxy=config) as browser:
+        browser.navigate("https://httpbin.org/ip")
+        print(f"Session {i+1}: {browser.proxy_manager.current_proxy}")
+    config.rotate()  # Move to next proxy
 ```

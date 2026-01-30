@@ -17,5 +17,14 @@ from .browser import (
     create_browser_with_level,
     get_stealth_config,
 )
+from .proxy import (
+    Proxy,
+    ProxyConfig,
+    ProxyPool,
+    ProxyType,
+    RotationStrategy,
+    ProxyManager,
+    get_location_for_country,
+)
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"

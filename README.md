@@ -31,6 +31,7 @@ A powerful Python package that combines advanced anti-detection techniques with 
 | **CDP Integration** | Chrome DevTools Protocol for timezone, geolocation & locale spoofing |
 | **Network Stealth** | Synchronizes `Accept-Language` headers with spoofed locale |
 | **Advanced Masking** | Spoofs Font metrics, AudioContext data, and WebGL parameters |
+| **Proxy Support** | HTTP/HTTPS/SOCKS5 with auth, rotation, and geo-location sync |
 
 ### 🎭 Human Behavior Simulation
 
@@ -134,15 +135,38 @@ browser = create_stealth_browser(
 )
 ```
 
+### Proxy Support (New!)
+
+Route traffic through proxies with optional geo-location sync:
+
+```python
+from stealth_scraper import create_stealth_browser, Proxy, ProxyConfig
+
+# Simple: Just pass a URL string
+with create_stealth_browser(proxy="http://user:pass@proxy.example.com:8080") as browser:
+    browser.navigate("https://httpbin.org/ip")
+
+# With geo-sync: Auto-match timezone/locale to proxy country
+proxy = Proxy(host="us.proxy.com", port=8080, country="US", username="user", password="pass")
+config = ProxyConfig(enabled=True, proxy=proxy, sync_location=True)
+# Browser automatically uses America/New_York timezone, en-US locale
+
+with create_stealth_browser(proxy=config) as browser:
+    browser.navigate("https://example.com")
+```
+
 ### Stealth Level Comparison
 
-| Feature | LOW | MEDIUM | HIGH |
-|---------|-----|--------|------|
-| **Mouse Speed** | 0.3-0.8s | 0.4-1.0s | 0.8-1.8s |
-| **Typing Speed** | 0.03-0.12s | 0.05-0.15s | 0.08-0.25s |
-| **Typos** | None | 0.5% | 1.5% |
-| **Hesitation** | None | Low | Medium |
-| **Fingerprint** | Standard | Masked | Masked + Noise |
+| Feature | FAST | LOW | MEDIUM | HIGH | PARANOID |
+|---------|------|-----|--------|------|----------|
+| **Mouse Speed** | Instant | 0.3-0.8s | 0.4-1.0s | 0.8-1.8s | 1.2-2.5s |
+| **Mouse Overshoot** | N/A | 5% | 15% | 25% | 40% |
+| **Typing Speed** | Instant | 0.03-0.12s | 0.05-0.15s | 0.08-0.25s | 0.12-0.35s |
+| **Typos** | None | None | 0.5% | 1.5% | 4.0% |
+| **Random Pauses** | None | 2% | 5% | 15% | 25% |
+| **Reading Speed** | N/A | 350 WPM | 250 WPM | 220 WPM | 180 WPM |
+| **Hesitation** | None | None | Low | Medium | High |
+| **Fingerprint** | Minimum | Standard | Masked | Masked + Noise | Maximum |
 
 ### ⚠️ Headless vs. Headful: The Trade-off
 
@@ -319,10 +343,11 @@ browser = create_stealth_browser(
 ### StealthLevel Enum
 
 ```python
+StealthLevel.FAST     # Instant interactions, minimal stealth (API compatible)
 StealthLevel.LOW      # Fast, minimal stealth
 StealthLevel.MEDIUM   # Balanced (default)
 StealthLevel.HIGH     # Maximum stealth
-StealthLevel.PARANOID # Alias for HIGH
+StealthLevel.PARANOID # Extreme stealth (slower, force headful)
 ```
 
 ### Identity & Location
@@ -340,6 +365,32 @@ StealthLocation.UK()    # London, en-GB
 StealthLocation.Tokyo() # Tokyo, ja-JP
 ```
 
+### Proxy Classes
+
+```python
+from stealth_scraper import Proxy, ProxyConfig, ProxyPool, ProxyType, RotationStrategy
+
+# Proxy types
+ProxyType.HTTP      # HTTP proxy
+ProxyType.HTTPS     # HTTPS proxy
+ProxyType.SOCKS5    # SOCKS5 proxy
+
+# Rotation strategies
+RotationStrategy.NONE        # No rotation (default)
+RotationStrategy.PER_SESSION # New proxy each browser session
+RotationStrategy.TIMED       # Rotate after interval
+RotationStrategy.ON_ERROR    # Rotate on proxy failure
+
+# Create proxy from URL
+proxy = Proxy.from_url("http://user:pass@host:8080", country="US")
+
+# ProxyConfig with geo-sync
+config = ProxyConfig(
+    enabled=True,
+    proxy=proxy,
+    sync_location=True  # Auto-set timezone/locale from proxy country
+)
+```
 
 ### Headless & Fast Mode (New!)
 
@@ -511,25 +562,30 @@ with StealthBrowser(stealth_config=config) as browser:
 ## 📁 Package Structure
 
 ```
-├── docs/                # Full Documentation
-│   ├── GUIDE.md            # Getting Started
-│   ├── CONFIGURATION.md    # Settings Deep Dive
-│   ├── API_REFERENCE.md    # Method Listing
-│   ├── STEALTH_ENGINE.md   # Technical Details
-│   └── TROUBLESHOOTING.md  # Known Issues
-├── tests/               # Comprehensive test suite
-│   ├── test_external_bypass.py    # Bypassing external defenses
-│   ├── test_local_mechanics.py     # Verifying internal logic (mouse, typing)
-│   ├── test_identity_spoofing.py   # Geolocation, Timezone, Locale
-│   ├── test_resource_blocking.py   # CDP Resource Interception
-│   ├── test_behavior_advanced.py   # Typos, Shortcuts, Window focus
-│   └── test_headless_benchmark.py  # Performance & headless checks
-├── examples/            # Usage examples
-├── requirements.txt         # Dependencies
-├── pyproject.toml          # Package configuration
-├── README.md               # This file
-├── DOCUMENTATION.md        # Full API documentation
-└── LICENSE                 # MIT License
+stealth_scraper/
+├── __init__.py          # Package exports
+├── browser.py           # StealthBrowser class
+├── config.py            # Configuration classes
+├── proxy/               # Proxy support module
+│   ├── __init__.py          # Proxy exports
+│   ├── config.py            # Proxy, ProxyConfig, ProxyPool
+│   ├── extension.py         # Chrome extension generator
+│   ├── manager.py           # ProxyManager class
+│   └── geo.py               # Geo-location sync
+├── simulators/          # Human behavior simulators
+│   ├── mouse.py             # Mouse movement
+│   ├── scroll.py            # Scrolling behavior
+│   └── keyboard.py          # Typing simulation
+└── resources/           # JS injection scripts
+
+docs/                    # Full Documentation
+├── GUIDE.md                 # Getting Started
+├── CONFIGURATION.md         # Settings Deep Dive
+├── API_REFERENCE.md         # Method Listing
+├── STEALTH_ENGINE.md        # Technical Details
+└── TROUBLESHOOTING.md       # Known Issues
+
+tests/                   # Comprehensive test suite
 ```
 
 ---

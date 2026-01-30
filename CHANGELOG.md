@@ -2,6 +2,29 @@
 
 All notable changes to **Ultimate Stealth Web Scraper** will be documented in this file.
 
+## [1.3.0] - 2026-01-29
+### Added
+- **Proxy Support**: Comprehensive proxy module with rotation and geo-sync.
+  - `Proxy` class for single proxy definition (HTTP/HTTPS/SOCKS5 with auth).
+  - `ProxyConfig` for full configuration with rotation strategies.
+  - `ProxyPool` for managing multiple proxies.
+  - `RotationStrategy` enum: NONE, PER_SESSION, TIMED, ON_ERROR.
+  - Chrome extension generator for authenticated proxy support.
+  - Geo-location sync: Auto-match timezone/locale to proxy country.
+- **40+ Country Mappings**: US, GB, JP, DE, FR, CA, AU, and more.
+- Simple URL string support: `proxy="http://user:pass@host:8080"`.
+
+### Changed
+- `create_stealth_browser()` now accepts `proxy` parameter.
+- `StealthBrowser.__init__` accepts `proxy` parameter.
+- Removed deprecated `ProxyConfig` stub from `config.py`.
+- **Stealth Level Rebalancing**: Improved preset configurations for better progression.
+  - FAST: Explicitly set mouse_overshoot_chance=0.0 (no overshoot in teleport mode).
+  - LOW: Added minimal random pauses (2% chance, 0.5-1.5s duration) to avoid robotic behavior.
+  - MEDIUM: Made all values explicit (mouse_overshoot_chance=0.15, random_pause_chance=0.05, reading_speed_wpm=250).
+  - Added progression documentation in code comments and docs.
+  - Updated comparison tables in README and CONFIGURATION docs.
+
 ## [1.2.0] - 2026-01-29
 ### Added
 - External JS files (`stealth.js`, `cursor.js`) for better maintainability.
