@@ -1,39 +1,21 @@
 """
-Ultimate Stealth Web Scraper Package
-Undetectable web scraping with human-like behavior simulation.
+Ultimate Stealth Web Scraper
+Designed to be undetectable by bot detection systems.
 """
 
-from .stealth_scraper import (
-    StealthBrowser,
-    HumanBehaviorConfig,
-    StealthConfig,
+from .config import (
     StealthLevel,
     CustomStealthLevel,
     StealthIdentity,
     StealthLocation,
-    HumanMouseSimulator,
-    HumanScrollSimulator,
-    HumanTypingSimulator,
-    BezierCurve,
+    StealthConfig,
+    HumanBehaviorConfig,
+)
+from .browser import (
+    StealthBrowser,
     create_stealth_browser,
-    get_stealth_config,
     create_browser_with_level,
+    get_stealth_config,
 )
 
 __version__ = "1.2.0"
-__all__ = [
-    "StealthBrowser",
-    "HumanBehaviorConfig",
-    "StealthConfig",
-    "StealthLevel",
-    "CustomStealthLevel",
-    "StealthIdentity",
-    "StealthLocation",
-    "HumanMouseSimulator",
-    "HumanScrollSimulator",
-    "HumanTypingSimulator",
-    "BezierCurve",
-    "create_stealth_browser",
-    "get_stealth_config",
-    "create_browser_with_level",
-]

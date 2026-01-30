@@ -1,5 +1,7 @@
 # 🥷 Ultimate Stealth Web Scraper
 
+[User Guide](docs/GUIDE.md) | [Configuration](docs/CONFIGURATION.md) | [API Reference](docs/API_REFERENCE.md) | [Stealth Engine](docs/STEALTH_ENGINE.md)
+
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Selenium](https://img.shields.io/badge/selenium-4.15+-green.svg)](https://selenium.dev)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
@@ -390,8 +392,8 @@ browser.scroll.scroll_to(y_position)
 browser.typing.type_text(element, "text", clear_first=True)
 
 # Advanced Behavior
-browser.simulate_window_switching((1.0, 3.0)) # Tab away for 1-3s
-browser.simulate_shortcut("ctrl+t")          # Press Ctrl+T
+browser.simulate_window_switching() # Simulates tabbing away and back
+browser.simulate_shortcut(['Control', 't']) # Press Ctrl+T
 
 ```
 
@@ -509,13 +511,20 @@ with StealthBrowser(stealth_config=config) as browser:
 ## 📁 Package Structure
 
 ```
-stealth-scraper/
-├── stealth_scraper/     # Main package
-│   ├── __init__.py          # Package exports
-│   └── stealth_scraper.py   # Main implementation
-├── tests/
-│   └── test_suite.py        # Test suite
-├── examples.py              # Usage examples
+├── docs/                # Full Documentation
+│   ├── GUIDE.md            # Getting Started
+│   ├── CONFIGURATION.md    # Settings Deep Dive
+│   ├── API_REFERENCE.md    # Method Listing
+│   ├── STEALTH_ENGINE.md   # Technical Details
+│   └── TROUBLESHOOTING.md  # Known Issues
+├── tests/               # Comprehensive test suite
+│   ├── test_external_bypass.py    # Bypassing external defenses
+│   ├── test_local_mechanics.py     # Verifying internal logic (mouse, typing)
+│   ├── test_identity_spoofing.py   # Geolocation, Timezone, Locale
+│   ├── test_resource_blocking.py   # CDP Resource Interception
+│   ├── test_behavior_advanced.py   # Typos, Shortcuts, Window focus
+│   └── test_headless_benchmark.py  # Performance & headless checks
+├── examples/            # Usage examples
 ├── requirements.txt         # Dependencies
 ├── pyproject.toml          # Package configuration
 ├── README.md               # This file

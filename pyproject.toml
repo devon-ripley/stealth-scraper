@@ -23,7 +23,6 @@ dependencies = [
     "numpy>=1.24.0",
     "scipy>=1.11.0",
     "selenium-stealth>=1.0.6",
-    "selenium-stealth>=1.0.6",
     "webdriver-manager>=4.0.0",
 ]
 
@@ -31,4 +30,7 @@ dependencies = [
 Homepage = "https://github.com/devon-ripley/stealth-scraper"
 
 [tool.setuptools]
-packages = ["stealth_scraper"]
+packages = ["stealth_scraper", "stealth_scraper.simulators", "stealth_scraper.utils"]
+
+[tool.setuptools.package-data]
+"stealth_scraper" = ["resources/*.js"]
