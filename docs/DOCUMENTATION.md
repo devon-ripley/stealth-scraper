@@ -49,6 +49,7 @@ pip install fake-useragent>=1.4.0
 pip install numpy>=1.24.0
 pip install scipy>=1.11.0
 pip install selenium-stealth>=1.0.6
+pip install webdriver-manager>=4.0.0
 ```
 
 ### Import the Package
@@ -109,11 +110,60 @@ browser = create_stealth_browser(
 )
 ```
 
+### High-Performance "Fast" Mode
+For API-like scraping speeds while maintaining fingerprint protection:
+
+```python
+from stealth_scraper import create_stealth_browser, StealthLevel
+
+browser = create_stealth_browser(
+    level=StealthLevel.FAST, 
+    headless=True,
+    block_resources=True
+)
+```
+
 ---
 
 ## Configuration
 
+### Preset Stealth Levels
+
+Using proper levels significantly improves success rates.
+
+```python
+from stealth_scraper import StealthLevel
+
+# Optimization Levels
+StealthLevel.FAST     # API-speed (0ms delays), invisible. Best for public data.
+StealthLevel.LOW      # Minimal delays, basic stealth. Good for simple sites.
+StealthLevel.MEDIUM   # Balanced (Default). Good for most sites.
+StealthLevel.HIGH     # Maximum human simulation. Best for tough anti-bot systems.
+StealthLevel.PARANOID # Extreme stealth, forces headful mode.
+```
+
+### Custom Stealth Levels
+
+Create your own reusable profiles by inheriting and overriding.
+
+```python
+from stealth_scraper import CustomStealthLevel, StealthLevel
+
+# Create a "Fast but Valid" profile
+MyProfile = CustomStealthLevel(
+    base=StealthLevel.HIGH, # Start with strong fingerprinting
+    
+    # Override behavior for speed
+    min_mouse_speed=0.1, 
+    min_action_pause=0.1,
+    headless=True
+)
+
+browser = create_stealth_browser(level=MyProfile)
+```
+
 ### HumanBehaviorConfig
+
 
 Controls human-like behavior simulation parameters.
 
@@ -241,77 +291,28 @@ config = StealthConfig(
 | `disable_notifications` | bool | True | Block notification permission requests |
 | `disable_popup_blocking` | bool | False | Allow popups |
 | `use_selenium_stealth` | bool | True | Apply selenium-stealth library patches |
+| `visualize_mouse` | bool | False | Enable hardware-accelerated red dot for debugging |
+| `identity` | enum | GHOST | Fingerprint strategy (GHOST or CONSISTENT) |
+| `location` | object | None | Geographic context (Timezone, Geo, Locale) |
+| `block_resources` | bool | False | Block images/CSS/fonts for extreme speed |
 
 ---
 
-### ProxyConfig
+### Identity & Location (Phase 2)
 
-Configuration for DataImpulse rotating residential proxies with geotargeting support.
-
-```python
-from stealth_scraper import ProxyConfig
-
-config = ProxyConfig(
-    enabled=True,                      # Enable proxy usage
-    username="your_username",          # DataImpulse username
-    password="your_password",          # DataImpulse password
-    
-    # DataImpulse defaults (usually don't need to change)
-    host="gw.dataimpulse.com",         # Proxy host
-    port=823,                          # Proxy port
-    
-    # Geotargeting
-    country="us",                      # ISO country code
-    city="saltlakecity",               # Optional: city targeting (doubles rate)
-)
-```
-
-#### Parameter Details
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `enabled` | bool | False | Enable/disable proxy usage |
-| `username` | str | "" | Your DataImpulse username |
-| `password` | str | "" | Your DataImpulse password |
-| `host` | str | "gw.dataimpulse.com" | DataImpulse proxy host |
-| `port` | int | 823 | DataImpulse proxy port |
-| `country` | str | "us" | ISO country code for geotargeting |
-| `city` | str | None | City name for city-level targeting (optional) |
-
-#### City Targeting Examples
-
-Common US cities (use lowercase, no spaces):
-- `newyork`, `losangeles`, `chicago`, `houston`, `phoenix`
-- `saltlakecity`, `sanfrancisco`, `seattle`, `denver`, `miami`
-
-> **Note:** City-level targeting doubles the rate (~$2/GB instead of ~$1/GB).
-
-#### Usage Example
+Control the browser's fingerprint consistency and geospatial context.
 
 ```python
-from stealth_scraper import StealthBrowser, ProxyConfig
+from stealth_scraper import StealthIdentity, StealthLocation
 
-# Basic proxy with country targeting only (~$1/GB)
-proxy = ProxyConfig(
-    enabled=True,
-    username="your_username",
-    password="your_password",
-    country="us"
-)
+# Identity presets
+StealthIdentity.GHOST        # Random every session
+StealthIdentity.CONSISTENT   # Deterministic seeded values
 
-# Proxy with city targeting (~$2/GB)
-proxy_city = ProxyConfig(
-    enabled=True,
-    username="your_username", 
-    password="your_password",
-    country="us",
-    city="saltlakecity"
-)
-
-# Use with StealthBrowser
-with StealthBrowser(proxy_config=proxy_city) as browser:
-    browser.navigate("https://httpbin.org/ip")
-    print(browser.get_page_source())  # Should show proxy IP
+# Location presets
+StealthLocation.US()    # en-US, NYC
+StealthLocation.UK()    # en-GB, London
+StealthLocation.Tokyo() # ja-JP, Tokyo
 ```
 
 ---
@@ -328,7 +329,6 @@ The main class for stealth web scraping. Combines all anti-detection features wi
 browser = StealthBrowser(
     behavior_config: Optional[HumanBehaviorConfig] = None,
     stealth_config: Optional[StealthConfig] = None,
-    proxy_config: Optional[ProxyConfig] = None,
 )
 ```
 
@@ -398,16 +398,14 @@ search_box = browser.wait_for_element(By.NAME, "q")
 browser.type_into(search_box, "stealth web scraping python")
 ```
 
+##### `simulate_window_switching() -> None`
+Simulate tabbing away and back (Focus/Blur events).
+
+##### `simulate_shortcut(keys: List[str]) -> None`
+Simulate a keyboard shortcut using CDP (e.g., `["Control", "c"]`).
+
 ##### `random_pause(min_time: float = None, max_time: float = None) -> None`
-Take a random pause to simulate human thinking/reading.
-
-```python
-# Use default pause durations from config
-browser.random_pause()
-
-# Specify custom duration range
-browser.random_pause(1.0, 3.0)
-```
+Take a random pause. If the pause is > 1s, the browser will occasionally perform "Idle Entropy" (micro mouse drifts).
 
 ##### `simulate_reading(word_count: int = None) -> None`
 Simulate reading the page content with scrolling.

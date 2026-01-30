@@ -4,6 +4,4 @@ fake-useragent>=1.4.0
 numpy>=1.24.0
 scipy>=1.11.0
 selenium-stealth>=1.0.6
-selenium-wire>=5.1.0
-blinker<1.8
 webdriver-manager>=4.0.0

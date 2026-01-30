@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stealth Scraper Test Ground</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 { color: #2c3e50; }
+        .section {
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #2980b9; }
+        .hover-target {
+            background-color: #e74c3c;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 4px;
+            margin: 20px 0;
+            transition: transform 0.3s;
+        }
+        .hover-target:hover {
+            transform: scale(1.05);
+            background-color: #c0392b;
+        }
+        .scroll-content {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+            padding: 15px;
+            background-color: #fafafa;
+        }
+        #dynamic-area {
+            min-height: 50px;
+            padding: 10px;
+            background-color: #e8f6f3;
+            border: 1px dashed #1abc9c;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stealth Scraper Test Ground</h1>
+        <p>This page allows testing of human-like interactions including typing, clicking, scrolling, and mouse movements.</p>
+
+        <div class="section" id="reading-section">
+            <h2>1. Reading & Scrolling</h2>
+            <p>A human user would typically read this introductory text before engaging with the forms below. The bot should pause here for a moment. This text is long enough to require some scrolling on smaller viewports.</p>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        </div>
+
+        <div class="section" id="form-section">
+            <h2>2. Form Interaction</h2>
+            <form id="login-form" onsubmit="event.preventDefault(); alert('Form Submitted!');">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Type slightly slowly...">
+                
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Watch for typos...">
+                
+                <label>
+                    <input type="checkbox" id="remember-me"> Remember me (Click me!)
+                </label>
+                
+                <br><br>
+                <button type="submit" id="submit-btn">Login</button>
+            </form>
+        </div>
+
+        <div class="section" id="mouse-section">
+            <h2>3. Mouse Movement</h2>
+            <p>Move the mouse over the box below to trigger the effect.</p>
+            <div class="hover-target" id="hover-box">
+                Hover Over Me!
+            </div>
+        </div>
+
+        <div class="section" id="dynamic-section">
+            <h2>4. Dynamic Content</h2>
+            <button id="show-hidden-btn" onclick="document.getElementById('dynamic-area').style.display='block';">Show Hidden Content</button>
+            <div id="dynamic-area">
+                This content was hidden! Good job finding it.
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>5. Long Scroll Area</h2>
+            <div class="scroll-content">
+                <p>Line 1</p><p>Line 2</p><p>Line 3</p><p>Line 4</p><p>Line 5</p>
+                <p>Line 6</p><p>Line 7</p><p>Line 8</p><p>Line 9</p><p>Line 10</p>
+                <p>Line 11</p><p>Line 12</p><p>Line 13</p><p>Line 14</p><p>Line 15</p>
+                <p>Line 16</p><p>Line 17</p><p>Line 18</p><p>Line 19</p><p>Line 20</p>
+                <p>Line 21</p><p>Line 22</p><p>Line 23</p><p>Line 24</p><p>Line 25</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

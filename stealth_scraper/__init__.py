@@ -7,8 +7,10 @@ from .stealth_scraper import (
     StealthBrowser,
     HumanBehaviorConfig,
     StealthConfig,
-    ProxyConfig,
     StealthLevel,
+    CustomStealthLevel,
+    StealthIdentity,
+    StealthLocation,
     HumanMouseSimulator,
     HumanScrollSimulator,
     HumanTypingSimulator,
@@ -18,13 +20,15 @@ from .stealth_scraper import (
     create_browser_with_level,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = [
     "StealthBrowser",
     "HumanBehaviorConfig",
     "StealthConfig",
-    "ProxyConfig",
     "StealthLevel",
+    "CustomStealthLevel",
+    "StealthIdentity",
+    "StealthLocation",
     "HumanMouseSimulator",
     "HumanScrollSimulator",
     "HumanTypingSimulator",

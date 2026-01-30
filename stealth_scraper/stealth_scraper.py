@@ -8,7 +8,7 @@ import time
 import math
 import json
 import platform
-from typing import Optional, Tuple, List, Callable, Any
+from typing import List, Tuple, Optional, Any, Dict, Union, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from enum import Enum
@@ -49,6 +49,48 @@ class StealthLevel(Enum):
     MEDIUM = "medium"    # Balanced - good stealth with reasonable speed
     HIGH = "high"        # Maximum stealth - slower but most human-like
     PARANOID = "paranoid"  # Alias for HIGH
+    FAST = "fast"        # Instant interactions, minimal stealth (API compatible)
+
+
+class CustomStealthLevel:
+    """
+    A custom stealth level allowing granular overrides.
+    
+    Args:
+        base: The base StealthLevel to inherit from (e.g. MEDIUM).
+        **overrides: Any parameter from HumanBehaviorConfig or StealthConfig.
+    """
+    def __init__(self, base: StealthLevel, **overrides):
+        self.base = base
+        self.overrides = overrides
+
+
+class StealthIdentity(Enum):
+    """Strategies for managing browser identity/fingerprint."""
+    GHOST = "ghost"            # Randomize every session (Canvas, WebGL, Fonts)
+    CONSISTENT = "consistent"  # Use a deterministic seed to keep fingerprint stable
+
+
+@dataclass
+class StealthLocation:
+    """Location context including Timezone, Geolocation, and Languages."""
+    timezone: str
+    latitude: float
+    longitude: float
+    locale: str
+    languages: List[str]
+
+    @staticmethod
+    def US():
+        return StealthLocation("America/New_York", 40.7128, -74.0060, "en-US", ["en-US", "en"])
+        
+    @staticmethod
+    def UK():
+        return StealthLocation("Europe/London", 51.5074, -0.1278, "en-GB", ["en-GB", "en"])
+        
+    @staticmethod
+    def Tokyo():
+        return StealthLocation("Asia/Tokyo", 35.6895, 139.6917, "ja-JP", ["ja-JP", "ja", "en-US"])
 
 
 @dataclass
@@ -56,12 +98,12 @@ class HumanBehaviorConfig:
     """Configuration for human-like behavior simulation."""
     
     # Mouse movement settings
-    min_mouse_speed: float = 0.5  # seconds
-    max_mouse_speed: float = 2.0
+    min_mouse_speed: float = 0.4  # seconds
+    max_mouse_speed: float = 1.0
     mouse_curve_intensity: float = 0.3  # How curved the mouse path is
     mouse_overshoot_chance: float = 0.15  # Chance to overshoot target
     mouse_jitter: bool = True  # Add small random movements
-    hesitation_chance: float = 0.0  # Chance to hesitate before clicking
+    hesitation_chance: float = 0.01  # Chance to hesitate before clicking
     
     # Scrolling settings
     scroll_style: str = "smooth"  # smooth, stepped, or mixed
@@ -71,14 +113,14 @@ class HumanBehaviorConfig:
     
     # Typing settings
     min_typing_delay: float = 0.05
-    max_typing_delay: float = 0.25
-    typo_chance: float = 0.02  # Chance to make and correct a typo
+    max_typing_delay: float = 0.15
+    typo_chance: float = 0.005  # Chance to make and correct a typo
     
     # General behavior
-    min_action_pause: float = 0.3
-    max_action_pause: float = 2.0
+    min_action_pause: float = 0.4
+    max_action_pause: float = 1.2
     random_pause_chance: float = 0.1  # Chance to take a random longer pause
-    random_pause_duration: Tuple[float, float] = (2.0, 8.0)
+    random_pause_duration: Tuple[float, float] = (2.0, 5.0)
     
     # Reading simulation
     reading_speed_wpm: int = 250  # Words per minute
@@ -97,6 +139,11 @@ class StealthConfig:
         (1920, 1080), (1366, 768), (1536, 864), (1440, 900),
         (1280, 720), (1600, 900), (1280, 800), (1680, 1050),
     ])
+    
+    # Modular Identity & Location (Phase 2)
+    identity: StealthIdentity = StealthIdentity.GHOST
+    identity_seed: Optional[str] = None
+    location: Optional[StealthLocation] = None
     
     # WebDriver detection evasion
     remove_webdriver_property: bool = True
@@ -117,35 +164,18 @@ class StealthConfig:
     spoof_timezone: Optional[str] = None  # e.g., "America/New_York"
     spoof_locale: Optional[str] = None  # e.g., "en-US"
     spoof_geolocation: Optional[Tuple[float, float]] = None  # (latitude, longitude)
-    block_images: bool = False  # Faster loading, less human-like
+    use_selenium_stealth: bool = True  # Use selenium-stealth library
+    visualize_mouse: bool = False  # Debug only: Visualize mouse cursor with a red dot
     disable_notifications: bool = True
     disable_popup_blocking: bool = False
-    use_selenium_stealth: bool = True  # Use selenium-stealth library
+    
+    # Performance & Visibility (Phase 3)
+    headless: bool = False             # Run browser invisibly (using --headless=new)
+    block_resources: bool = False      # Block images/css/fonts for speed
+    block_images: bool = False         # Block images via Chrome preferences
 
 
-@dataclass
-class ProxyConfig:
-    """Configuration for DataImpulse rotating residential proxies.
-    
-    DataImpulse proxy format:
-    - Host: gw.dataimpulse.com
-    - Port: 823
-    - Username format with targeting: username__cr.{country};city.{city}
-    
-    Pricing note: City-level targeting doubles the rate (~$2/GB vs ~$1/GB).
-    """
-    
-    enabled: bool = False
-    username: str = ""
-    password: str = ""
-    
-    # DataImpulse defaults
-    host: str = "gw.dataimpulse.com"
-    port: int = 823
-    
-    # Geotargeting
-    country: str = "us"  # ISO country code
-    city: Optional[str] = None  # e.g., "newyork", "losangeles", "saltlakecity"
+
 
 
 class BezierCurve:
@@ -198,7 +228,10 @@ class BezierCurve:
         
         # Sample the curve
         path = []
-        num_samples = max(20, int(math.sqrt((end[0]-start[0])**2 + (end[1]-start[1])**2) / 5))
+        # Optimization: Use larger steps (25px) to reduce Selenium overhead
+        # This is overridden by FAST mode teleportation in simulator
+        step_size = 25
+        num_samples = max(5, int(math.sqrt((end[0]-start[0])**2 + (end[1]-start[1])**2) / step_size))
         
         for i in range(num_samples + 1):
             t = i / num_samples
@@ -215,7 +248,6 @@ class HumanMouseSimulator:
         self.driver = driver
         self.config = config
         self.current_pos = (0, 0)
-        self.actions = ActionChains(driver)
     
     def _add_jitter(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """Add small random jitter to mouse path."""
@@ -257,8 +289,15 @@ class HumanMouseSimulator:
         # Clamp target
         x = max(0, min(x, max_x))
         y = max(0, min(y, max_y))
+
+        # FAST mode: Teleport instantly via CDP
+        if self.config.max_mouse_speed == 0.0:
+            self._cdp_move(x, y)
+            if click:
+                self._human_click()
+            return
         
-        # Generate curved path
+        # Generate curved path for human-like movement
         path = BezierCurve.generate_curve(
             self.current_pos,
             (x, y),
@@ -279,96 +318,112 @@ class HumanMouseSimulator:
         )
         speeds = self._calculate_speed_curve(len(path))
         
-        # Execute movement
-        self.actions.reset_actions()
-        
-        prev_x, prev_y = self.current_pos
+        # Execute movement via CDP
         for i, (px, py) in enumerate(path[1:], 1):
-            dx = px - prev_x
-            dy = py - prev_y
-            
-            # Skip zero movements
-            if dx == 0 and dy == 0:
+            # Skip redundant points
+            if (px, py) == self.current_pos:
                 continue
                 
-            self.actions.move_by_offset(dx, dy)
-            prev_x, prev_y = px, py
+            self._cdp_move(px, py)
             
             # Variable delay based on position in path
             if i < len(path) - 1:
                 base_delay = total_time / len(path)
                 speed_factor = 0.5 + speeds[i]
                 delay = base_delay * speed_factor * random.uniform(0.8, 1.2)
-                self.actions.pause(delay)
+                time.sleep(delay)
         
-        try:
-            self.actions.perform()
-            self.current_pos = (prev_x, prev_y)  # Update to actual final position
-        except Exception:
-            # Fallback if action chain fails - teleport to target to maintain state
-            self.current_pos = (x, y)
-            
-        # Hesitation (Paranoid mode)
+        # Hesitation logic
         if random.random() < self.config.hesitation_chance:
             self._perform_hesitation()
         
-        # Possible overshoot and correction
+        # Overshoot logic
         if random.random() < self.config.mouse_overshoot_chance:
-            overshoot_x = x + random.randint(-20, 20)
-            overshoot_y = y + random.randint(-15, 15)
-            
-            # Clamp overshoot
-            overshoot_x = max(0, min(overshoot_x, max_x))
-            overshoot_y = max(0, min(overshoot_y, max_y))
-            
+            overshoot_x = max(0, min(x + random.randint(-20, 20), max_x))
+            overshoot_y = max(0, min(y + random.randint(-15, 15), max_y))
             try:
                 self._micro_move(overshoot_x, overshoot_y)
                 time.sleep(random.uniform(0.1, 0.3))
                 self._micro_move(x, y)
-            except:
-                pass
+            except: pass
         
         if click:
             self._human_click()
+
+    def _cdp_move(self, x: int, y: int) -> None:
+        """Move cursor using CDP to avoid Selenium overhead."""
+        try:
+            self.driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                "type": "mouseMoved",
+                "x": x,
+                "y": y,
+                "button": "none",
+                "pointerType": "mouse"
+            })
+            self.current_pos = (x, y)
+        except:
+            pass
     
     def _micro_move(self, x: int, y: int) -> None:
-        """Small correction movement."""
-        self.actions.reset_actions()
-        dx = x - self.current_pos[0]
-        dy = y - self.current_pos[1]
-        self.actions.move_by_offset(dx, dy)
-        self.actions.perform()
-        self.current_pos = (x, y)
+        """Small correction movement using CDP."""
+        self._cdp_move(x, y)
     
     def _human_click(self) -> None:
-        """Perform a human-like click with variable timing."""
-        self.actions.reset_actions()
+        """Simulate a human-like click using CDP."""
+        x, y = self.current_pos
         
-        # Random pre-click pause
-        time.sleep(random.uniform(0.05, 0.15))
-        
-        # Click with random hold time
-        self.actions.click_and_hold()
-        self.actions.pause(random.uniform(0.05, 0.12))
-        self.actions.release()
-        self.actions.perform()
-        
-        # Post-click pause
-        time.sleep(random.uniform(0.1, 0.3))
+        # Random pre-click pause (skip in FAST mode)
+        if self.config.min_action_pause > 0:
+            time.sleep(random.uniform(0.02, 0.08))
+            
+        try:
+            # Mouse Down
+            self.driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                "type": "mousePressed",
+                "x": x,
+                "y": y,
+                "button": "left",
+                "buttons": 1, # Left button pressed
+                "clickCount": 1,
+                "pointerType": "mouse"
+            })
+            
+            # Short hold time (skip in FAST mode)
+            if self.config.min_action_pause > 0:
+                time.sleep(random.uniform(0.05, 0.15))
+            
+            # Mouse Up
+            self.driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                "type": "mouseReleased",
+                "x": x,
+                "y": y,
+                "button": "left",
+                "buttons": 0, # Released
+                "clickCount": 1,
+                "pointerType": "mouse"
+            })
+        except:
+            pass
+            
+        # Random post-click pause (skip in FAST mode)
+        if self.config.min_action_pause > 0:
+            time.sleep(random.uniform(0.1, 0.3))
 
     def _perform_hesitation(self) -> None:
         """Perform a hesitation movement (stop, micro-move, wait)."""
         time.sleep(random.uniform(0.1, 0.4))
         
-        # Small random movement nearby
+        # Small random movement nearby using CDP (Fixes ActionChains crash)
+        x, y = self.current_pos
         offset_x = random.randint(-10, 10)
         offset_y = random.randint(-10, 10)
         
-        self.actions.reset_actions()
-        self.actions.move_by_offset(offset_x, offset_y)
-        self.actions.pause(random.uniform(0.2, 0.5))
-        self.actions.move_by_offset(-offset_x, -offset_y) # Return roughly
-        self.actions.perform()
+        # Move slightly away
+        self._micro_move(x + offset_x, y + offset_y)
+        time.sleep(random.uniform(0.2, 0.5))
+        
+        # Move back (roughly)
+        self._micro_move(x, y)
         
         time.sleep(random.uniform(0.1, 0.3))
     
@@ -592,14 +647,22 @@ class StealthBrowser:
     
     def __init__(
         self,
-        behavior_config: Optional[HumanBehaviorConfig] = None,
-        stealth_config: Optional[StealthConfig] = None,
+        behavior_config: Optional['HumanBehaviorConfig'] = None,
+        stealth_config: Optional['StealthConfig'] = None,
         proxy_config: Optional['ProxyConfig'] = None,
     ):
+        """
+        Initialize the stealth browser.
+        
+        Args:
+            behavior_config: Configuration for human behavior simulation
+            stealth_config: Configuration for browser fingerprinting/stealth
+            proxy_config: Configuration for rotating proxies
+        """
         self.behavior_config = behavior_config or HumanBehaviorConfig()
         self.stealth_config = stealth_config or StealthConfig()
         self.proxy_config = proxy_config
-        self.driver: Optional[webdriver.Chrome] = None
+        self.driver = None
         self.mouse: Optional[HumanMouseSimulator] = None
         self.scroll: Optional[HumanScrollSimulator] = None
         self.typing: Optional[HumanTypingSimulator] = None
@@ -695,6 +758,14 @@ class StealthBrowser:
         # Hardware acceleration settings
         options.add_argument("--enable-accelerated-2d-canvas")
         options.add_argument("--enable-accelerated-video-decode")
+        
+        # Headless mode optimizations (Phase 3)
+        if self.stealth_config.headless:
+            # Note: UC handles the main --headless flag, but we add these for robustness
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1920,1080")
+            options.add_argument("--hide-scrollbars")
         
         # ========================================
         # PRIVACY AND SECURITY SETTINGS
@@ -812,37 +883,59 @@ class StealthBrowser:
         return options
     
     def _inject_stealth_scripts(self) -> None:
-        """Inject JavaScript to mask automation indicators."""
-        stealth_scripts = """
+        """Inject JavaScript to mask automation indicators with optional seeded consistency."""
+        # Handle Identity (Seeded vs Ghost)
+        seed = None
+        if self.stealth_config.identity == StealthIdentity.CONSISTENT:
+            # Priority: explicit seed > profile path > stable default
+            seed = self.stealth_config.identity_seed or self.stealth_config.profile_path or "stable-seed"
+        
+        # Generator for seeded values
+        rng = random.Random(seed) if seed else random
+        
+        # Pre-calculate seeded constants for injection
+        inject_vars = {
+            "webgl_vendor": rng.choice(["Intel Inc.", "Google Inc.", "NVIDIA Corporation"]),
+            "webgl_renderer": rng.choice([
+                "Intel Iris OpenGL Engine",
+                "Intel(R) UHD Graphics 620",
+                "ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 Direct3D11)"
+            ]),
+            "hardware_concurrency": rng.choice([4, 8, 12, 16]),
+            "device_memory": rng.choice([4, 8, 16]),
+            "canvas_noise": rng.uniform(0.001, 0.005),
+            "audio_noise": rng.uniform(0.0001, 0.0005),
+        }
+
+        stealth_scripts = f"""
+        const STEALTH_CONFIG = {json.dumps(inject_vars)};
+        
         // ========================================
         // WEBDRIVER PROPERTY MASKING
         // ========================================
         
-        // Overwrite navigator.webdriver
-        Object.defineProperty(navigator, 'webdriver', {
+        Object.defineProperty(navigator, 'webdriver', {{
             get: () => undefined,
             configurable: true
-        });
+        }});
         
-        // Delete webdriver property completely
         delete navigator.__proto__.webdriver;
         
         // ========================================
         // CHROME RUNTIME MASKING
         // ========================================
         
-        // Overwrite chrome runtime to look like a real Chrome instance
-        window.chrome = {
-            runtime: {
-                connect: function() {},
-                sendMessage: function() {},
-                onMessage: {
-                    addListener: function() {},
-                    removeListener: function() {}
-                }
-            },
-            loadTimes: function() {
-                return {
+        window.chrome = {{
+            runtime: {{
+                connect: function() {{}},
+                sendMessage: function() {{}},
+                onMessage: {{
+                    addListener: function() {{}},
+                    removeListener: function() {{}}
+                }}
+            }},
+            loadTimes: function() {{
+                return {{
                     commitLoadTime: Date.now() / 1000 - Math.random() * 5,
                     connectionInfo: "h2",
                     finishDocumentLoadTime: Date.now() / 1000 - Math.random() * 2,
@@ -856,30 +949,30 @@ class StealthBrowser:
                     wasAlternateProtocolAvailable: false,
                     wasFetchedViaSpdy: true,
                     wasNpnNegotiated: true
-                };
-            },
-            csi: function() {
-                return {
+                }};
+            }},
+            csi: function() {{
+                return {{
                     onloadT: Date.now(),
                     pageT: Math.random() * 1000 + 500,
                     startE: Date.now() - Math.random() * 5000,
                     tran: 15
-                };
-            },
-            app: {
+                }};
+            }},
+            app: {{
                 isInstalled: false,
-                InstallState: {
+                InstallState: {{
                     DISABLED: "disabled",
                     INSTALLED: "installed",
                     NOT_INSTALLED: "not_installed"
-                },
-                RunningState: {
+                }},
+                RunningState: {{
                     CANNOT_RUN: "cannot_run",
                     READY_TO_RUN: "ready_to_run",
                     RUNNING: "running"
-                }
-            }
-        };
+                }}
+            }}
+        }};
         
         // ========================================
         // PERMISSIONS API MASKING
@@ -888,7 +981,7 @@ class StealthBrowser:
         const originalQuery = window.navigator.permissions.query;
         window.navigator.permissions.query = (parameters) => (
             parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
+                Promise.resolve({{ state: Notification.permission }}) :
                 originalQuery(parameters)
         );
         
@@ -896,394 +989,178 @@ class StealthBrowser:
         // PLUGINS MASKING
         // ========================================
         
-        // Create realistic plugin array
-        const makePluginArray = () => {
+        const makePluginArray = () => {{
             const plugins = [
-                {
-                    name: "Chrome PDF Plugin",
-                    filename: "internal-pdf-viewer",
-                    description: "Portable Document Format"
-                },
-                {
-                    name: "Chrome PDF Viewer", 
-                    filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
-                    description: ""
-                },
-                {
-                    name: "Native Client",
-                    filename: "internal-nacl-plugin",
-                    description: ""
-                }
+                {{ name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format" }},
+                {{ name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "" }},
+                {{ name: "Native Client", filename: "internal-nacl-plugin", description: "" }}
             ];
             
             const pluginArray = Object.create(PluginArray.prototype);
-            plugins.forEach((p, i) => {
+            plugins.forEach((p, i) => {{
                 const plugin = Object.create(Plugin.prototype);
                 plugin.name = p.name;
                 plugin.filename = p.filename;
                 plugin.description = p.description;
                 pluginArray[i] = plugin;
-            });
+            }});
             pluginArray.length = plugins.length;
-            pluginArray.item = (i) => pluginArray[i];
-            pluginArray.namedItem = (name) => plugins.find(p => p.name === name);
-            pluginArray.refresh = () => {};
             return pluginArray;
-        };
+        }};
         
-        Object.defineProperty(navigator, 'plugins', {
+        Object.defineProperty(navigator, 'plugins', {{
             get: () => makePluginArray(),
             configurable: true
-        });
+        }});
         
         // ========================================
-        // LANGUAGES MASKING
+        // IDENTITY MASKING (MODULAR)
         // ========================================
         
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en'],
+        Object.defineProperty(navigator, 'hardwareConcurrency', {{
+            get: () => STEALTH_CONFIG.hardware_concurrency,
             configurable: true
-        });
+        }});
         
-        Object.defineProperty(navigator, 'language', {
-            get: () => 'en-US',
+        Object.defineProperty(navigator, 'deviceMemory', {{
+            get: () => STEALTH_CONFIG.device_memory,
             configurable: true
-        });
-        
-        // ========================================
-        // HARDWARE CONCURRENCY (CPU CORES)
-        // ========================================
-        
-        Object.defineProperty(navigator, 'hardwareConcurrency', {
-            get: () => [4, 8, 12, 16][Math.floor(Math.random() * 4)],
-            configurable: true
-        });
-        
-        // ========================================
-        // DEVICE MEMORY
-        // ========================================
-        
-        Object.defineProperty(navigator, 'deviceMemory', {
-            get: () => [4, 8, 16][Math.floor(Math.random() * 3)],
-            configurable: true
-        });
-        
-        // ========================================
-        // MAX TOUCH POINTS
-        // ========================================
-        
-        Object.defineProperty(navigator, 'maxTouchPoints', {
-            get: () => 0,  // Desktop typically has 0
-            configurable: true
-        });
-        
-        // ========================================
-        // PLATFORM MASKING
-        // ========================================
-        
-        Object.defineProperty(navigator, 'platform', {
+        }});
+
+        Object.defineProperty(navigator, 'platform', {{
             get: () => 'Win32',
             configurable: true
-        });
+        }});
         
-        // ========================================
-        // VENDOR MASKING
-        // ========================================
-        
-        Object.defineProperty(navigator, 'vendor', {
+        Object.defineProperty(navigator, 'vendor', {{
             get: () => 'Google Inc.',
             configurable: true
-        });
-        
-        // ========================================
-        // CONNECTION INFO
-        // ========================================
-        
-        if (navigator.connection) {
-            Object.defineProperty(navigator.connection, 'rtt', {
-                get: () => Math.floor(Math.random() * 100) + 50,
-                configurable: true
-            });
-        }
+        }});
         
         // ========================================
         // CANVAS FINGERPRINTING PROTECTION
         // ========================================
         
         const originalGetContext = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function(type, attributes) {
+        HTMLCanvasElement.prototype.getContext = function(type, attributes) {{
             const context = originalGetContext.call(this, type, attributes);
-            if (type === '2d' && context) {
+            if (type === '2d' && context) {{
                 const originalFillText = context.fillText.bind(context);
-                const originalStrokeText = context.strokeText.bind(context);
-                const originalFillRect = context.fillRect.bind(context);
-                
-                // Add imperceptible noise to canvas operations
-                context.fillText = function(...args) {
-                    context.shadowBlur = Math.random() * 0.5;
-                    context.shadowColor = 'rgba(0,0,0,0.01)';
+                context.fillText = function(...args) {{
+                    context.shadowBlur = Math.random() * STEALTH_CONFIG.canvas_noise;
                     return originalFillText(...args);
-                };
-                
-                context.strokeText = function(...args) {
-                    context.shadowBlur = Math.random() * 0.5;
-                    context.shadowColor = 'rgba(0,0,0,0.01)';
-                    return originalStrokeText(...args);
-                };
-            }
+                }};
+            }}
             return context;
-        };
-        
-        // Modify toDataURL to add noise
-        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        HTMLCanvasElement.prototype.toDataURL = function(type, quality) {
-            // Only modify if canvas has been drawn to
-            if (this.width > 0 && this.height > 0) {
-                const ctx = this.getContext('2d');
-                if (ctx) {
-                    // Add a single invisible pixel modification
-                    const imageData = ctx.getImageData(0, 0, 1, 1);
-                    imageData.data[0] = imageData.data[0] ^ (Math.random() > 0.5 ? 1 : 0);
-                    ctx.putImageData(imageData, 0, 0);
-                }
-            }
-            return originalToDataURL.call(this, type, quality);
-        };
+        }};
         
         // ========================================
         // WEBGL FINGERPRINTING PROTECTION
         // ========================================
         
-        const getParameterProxyHandler = {
-            apply: function(target, thisArg, argumentsList) {
+        const getParameterProxyHandler = {{
+            apply: function(target, thisArg, argumentsList) {{
                 const param = argumentsList[0];
-                const result = Reflect.apply(target, thisArg, argumentsList);
-                
-                // UNMASKED_VENDOR_WEBGL
-                if (param === 37445) {
-                    return 'Intel Inc.';
-                }
-                // UNMASKED_RENDERER_WEBGL
-                if (param === 37446) {
-                    return 'Intel Iris OpenGL Engine';
-                }
-                return result;
-            }
-        };
+                if (param === 37445) return STEALTH_CONFIG.webgl_vendor;
+                if (param === 37446) return STEALTH_CONFIG.webgl_renderer;
+                return Reflect.apply(target, thisArg, argumentsList);
+            }}
+        }};
         
-        try {
-            const getParameterPrototype = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = new Proxy(getParameterPrototype, getParameterProxyHandler);
-            
-            // Also handle WebGL2
-            if (typeof WebGL2RenderingContext !== 'undefined') {
-                const getParameter2Prototype = WebGL2RenderingContext.prototype.getParameter;
-                WebGL2RenderingContext.prototype.getParameter = new Proxy(getParameter2Prototype, getParameterProxyHandler);
-            }
-        } catch (e) {}
-        
-        // ========================================
-        // AUDIO CONTEXT FINGERPRINTING PROTECTION
-        // ========================================
-        
-        const audioContextPrototype = window.AudioContext || window.webkitAudioContext;
-        if (audioContextPrototype) {
-            const originalCreateOscillator = audioContextPrototype.prototype.createOscillator;
-            audioContextPrototype.prototype.createOscillator = function() {
-                const oscillator = originalCreateOscillator.call(this);
-                // Slightly modify the default frequency
-                const originalFrequency = oscillator.frequency.value;
-                oscillator.frequency.value = originalFrequency + (Math.random() - 0.5) * 0.01;
-                return oscillator;
-            };
-            
-            const originalGetChannelData = AudioBuffer.prototype.getChannelData;
-            AudioBuffer.prototype.getChannelData = function(channel) {
-                const data = originalGetChannelData.call(this, channel);
-                // Add tiny noise to prevent fingerprinting
-                for (let i = 0; i < Math.min(10, data.length); i++) {
-                    data[i] += (Math.random() - 0.5) * 0.0001;
-                }
-                return data;
-            };
-        }
-        
-        // ========================================
-        // IFRAME CONTENTWINDOW PROTECTION
-        // ========================================
-        
-        // Prevent detection via iframe contentWindow checks
-        try {
-            const originalContentWindow = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
-            Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-                get: function() {
-                    const win = originalContentWindow.get.call(this);
-                    if (win) {
-                        try {
-                            // Try to mask webdriver in iframes too
-                            Object.defineProperty(win.navigator, 'webdriver', {
-                                get: () => undefined
-                            });
-                        } catch (e) {}
-                    }
-                    return win;
-                }
-            });
-        } catch (e) {}
-        
-        // ========================================
-        // SCREEN PROPERTIES
-        // ========================================
-        
-        const screenProps = {
-            availWidth: screen.availWidth,
-            availHeight: screen.availHeight,
-            width: screen.width,
-            height: screen.height,
-            colorDepth: 24,
-            pixelDepth: 24,
-        };
-        
-        for (const [prop, value] of Object.entries(screenProps)) {
-            try {
-                Object.defineProperty(screen, prop, {
-                    get: () => value,
-                    configurable: true
-                });
-            } catch (e) {}
-        }
-        
-        // ========================================
-        // BATTERY API MASKING
-        // ========================================
-        
-        // Some sites check for battery API behavior
-        if (navigator.getBattery) {
-            navigator.getBattery = async function() {
-                return {
-                    charging: true,
-                    chargingTime: Infinity,
-                    dischargingTime: Infinity,
-                    level: 1.0,
-                    addEventListener: function() {},
-                    removeEventListener: function() {}
-                };
-            };
-        }
-        
-        // ========================================
-        // NOTIFICATION PERMISSION
-        // ========================================
-        
-        // Ensure notification permission looks normal
-        Object.defineProperty(Notification, 'permission', {
-            get: () => 'default',
-            configurable: true
-        });
-
-        // ========================================
-        // FONT MASKING
-        // ========================================
-        
-        // Mask font enumeration to prevent OS fingerprinting via fonts
-        if (window.queryLocalFonts) {
-            window.queryLocalFonts = async () => {
-                return [
-                    { family: "Arial", fullName: "Arial", postscriptName: "Arial" },
-                    { family: "Times New Roman", fullName: "Times New Roman", postscriptName: "TimesNewRoman" },
-                    { family: "Courier New", fullName: "Courier New", postscriptName: "CourierNew" },
-                    { family: "Verdana", fullName: "Verdana", postscriptName: "Verdana" },
-                    { family: "Georgia", fullName: "Georgia", postscriptName: "Georgia" },
-                    { family: "Palatino", fullName: "Palatino", postscriptName: "Palatino" },
-                    { family: "Garamond", fullName: "Garamond", postscriptName: "Garamond" },
-                    { family: "Bookman", fullName: "Bookman", postscriptName: "Bookman" },
-                    { family: "Comic Sans MS", fullName: "Comic Sans MS", postscriptName: "ComicSansMS" },
-                    { family: "Trebuchet MS", fullName: "Trebuchet MS", postscriptName: "TrebuchetMS" },
-                    { family: "Arial Black", fullName: "Arial Black", postscriptName: "ArialBlack" },
-                    { family: "Impact", fullName: "Impact", postscriptName: "Impact" }
-                ];
-            };
-        }
-        
-        // ========================================
-        // SCREEN PROPS RANDOMIZATION
-        // ========================================
-        
-        // Add slight noise to screen dimensions to match window or randomized values
-        // This runs after the initial screen prop definition
-        
-        const updateScreenProps = () => {
-            const width = window.innerWidth + Math.floor(Math.random() * 200);
-            const height = window.innerHeight + Math.floor(Math.random() * 100);
-            
-            try {
-                Object.defineProperty(screen, 'width', { get: () => width });
-                Object.defineProperty(screen, 'height', { get: () => height });
-                Object.defineProperty(screen, 'availWidth', { get: () => width });
-                Object.defineProperty(screen, 'availHeight', { get: () => height - 40 }); // Taskbar
-            } catch (e) {}
-        };
-        updateScreenProps();
-
-        
-        console.log = (function(old_console_log) {
-            return function() {
-                // Filter out any webdriver-related console messages
-                const args = Array.from(arguments);
-                const hasWebdriver = args.some(arg => 
-                    typeof arg === 'string' && 
-                    (arg.includes('webdriver') || arg.includes('automation'))
-                );
-                if (!hasWebdriver) {
-                    old_console_log.apply(console, arguments);
-                }
-            };
-        })(console.log);
+        try {{
+            WebGLRenderingContext.prototype.getParameter = new Proxy(WebGLRenderingContext.prototype.getParameter, getParameterProxyHandler);
+            if (typeof WebGL2RenderingContext !== 'undefined') {{
+                WebGL2RenderingContext.prototype.getParameter = new Proxy(WebGL2RenderingContext.prototype.getParameter, getParameterProxyHandler);
+            }}
+        }} catch (e) {{}}
         """
         
         self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": stealth_scripts
         })
+        
+    def _inject_cursor_visualizer(self) -> None:
+        """Inject a hardware-accelerated visual cursor tracker for debugging/demo."""
+        cursor_js = """
+        (function() {
+            const ID = 'stealth-cursor-tracker';
+            if (document.getElementById(ID)) return;
+            
+            const cursor = document.createElement('div');
+            cursor.id = ID;
+            Object.assign(cursor.style, {
+                width: '20px',
+                height: '20px',
+                backgroundColor: 'rgba(255, 0, 0, 0.4)',
+                border: '2px solid red',
+                borderRadius: '50%',
+                position: 'fixed',
+                pointerEvents: 'none',
+                zIndex: '999999',
+                transition: 'transform 0.05s linear, background-color 0.1s',
+                transform: 'translate3d(0, 0, 0)',
+                left: '0',
+                top: '0',
+                willChange: 'transform'
+            });
+            
+            const inject = () => {
+                if (document.getElementById(ID)) return;
+                (document.body || document.documentElement).appendChild(cursor);
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', inject);
+            } else {
+                inject();
+            }
+
+            window.addEventListener('mousemove', (e) => {
+                cursor.style.transform = `translate3d(${e.clientX - 10}px, ${e.clientY - 10}px, 0)`;
+            }, { passive: true });
+
+            window.addEventListener('mousedown', () => {
+                cursor.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
+                cursor.style.transform += ' scale(0.8)';
+            }, { passive: true });
+
+            window.addEventListener('mouseup', () => {
+                cursor.style.backgroundColor = 'rgba(255, 0, 0, 0.4)';
+            }, { passive: true });
+        })();
+        """
+        try:
+            self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": cursor_js
+            })
+        except Exception as e:
+            print(f"DEBUG: Failed to inject visualizer: {e}")
+        
+
     
     def start(self) -> 'StealthBrowser':
         """Initialize the stealth browser."""
         options = self._get_stealth_options()
-        
-        # Check if using proxy via selenium-wire
-        use_proxy = self.proxy_config and self.proxy_config.enabled
-        seleniumwire_options = {}
-        
-        if use_proxy:
-            proxy_url = self._build_proxy_url()
-            seleniumwire_options = {
-                'proxy': {
-                    'http': proxy_url,
-                    'https': proxy_url,
-                    'no_proxy': 'localhost,127.0.0.1'
-                }
-            }
         
         if self.stealth_config.use_undetected_chrome:
             try:
                 # Use webdriver_manager to get the definitely-correct driver path
                 driver_path = ChromeDriverManager().install()
                 
-                if use_proxy:
-                    import seleniumwire.undetected_chromedriver as uc_wire
-                    self.driver = uc_wire.Chrome(
-                        options=options,
-                        seleniumwire_options=seleniumwire_options,
-                        headless=False, # UC often requires headless=False
-                        use_subprocess=True,
-                        driver_executable_path=driver_path,
-                    )
-                else:
-                    self.driver = uc.Chrome(
-                        options=options,
-                        headless=False,
-                        use_subprocess=True,
-                        driver_executable_path=driver_path,
-                    )
+                # Initialize the driver
+                self.driver = uc.Chrome(
+                    options=options,
+                    headless=self.stealth_config.headless, 
+                    use_subprocess=True,
+                    driver_executable_path=driver_path,
+                )
+                
+                # Execute CDP commands AFTER driver creation
+                if self.driver:
+                    # Enable resource blocking if requested
+                    if self.stealth_config.block_resources:
+                        self._enable_resource_blocking()
+
             except Exception as e:
                 # If UC fails (often due to version mismatch), log it and try to clean up
                 print(f"Error initializing undetected_chromedriver: {e}")
@@ -1295,18 +1172,10 @@ class StealthBrowser:
                     pass
                 raise e
         else:
-            if use_proxy:
-                from seleniumwire import webdriver as wire_webdriver
-                self.driver = wire_webdriver.Chrome(
-                    service=ChromeService(ChromeDriverManager().install()),
-                    options=options,
-                    seleniumwire_options=seleniumwire_options
-                )
-            else:
-                self.driver = webdriver.Chrome(
-                    service=ChromeService(ChromeDriverManager().install()),
-                    options=options
-                )
+            self.driver = webdriver.Chrome(
+                service=ChromeService(ChromeDriverManager().install()),
+                options=options
+            )
         
         # Apply selenium-stealth if available and enabled
         if SELENIUM_STEALTH_AVAILABLE and self.stealth_config.use_selenium_stealth:
@@ -1318,6 +1187,10 @@ class StealthBrowser:
         
         # Apply CDP-based configurations
         self._apply_cdp_configurations()
+        
+        # Inject mouse visualizer if requested
+        if self.stealth_config.visualize_mouse:
+            self._inject_cursor_visualizer()
         
         # Initialize simulators
         self.mouse = HumanMouseSimulator(self.driver, self.behavior_config)
@@ -1352,31 +1225,30 @@ class StealthBrowser:
     def _apply_cdp_configurations(self) -> None:
         """Apply Chrome DevTools Protocol configurations for enhanced stealth."""
         try:
-            # Set timezone if specified
-            if self.stealth_config.spoof_timezone:
-                self.driver.execute_cdp_cmd(
-                    "Emulation.setTimezoneOverride",
-                    {"timezoneId": self.stealth_config.spoof_timezone}
-                )
-            
-            # Set geolocation if specified
+            # 1. Handle Location context (Phase 2)
+            loc = self.stealth_config.location
+            timezone = self.stealth_config.spoof_timezone
+            lat, lon = None, None
             if self.stealth_config.spoof_geolocation:
                 lat, lon = self.stealth_config.spoof_geolocation
-                self.driver.execute_cdp_cmd(
-                    "Emulation.setGeolocationOverride",
-                    {
-                        "latitude": lat,
-                        "longitude": lon,
-                        "accuracy": 100
-                    }
-                )
+            locale = self.stealth_config.spoof_locale
             
-            # Set locale/language via CDP
-            if self.stealth_config.spoof_locale:
-                self.driver.execute_cdp_cmd(
-                    "Emulation.setLocaleOverride",
-                    {"locale": self.stealth_config.spoof_locale}
-                )
+            # Location object takes precedence
+            if loc:
+                timezone = loc.timezone
+                lat, lon = loc.latitude, loc.longitude
+                locale = loc.locale
+
+            if timezone:
+                self.driver.execute_cdp_cmd("Emulation.setTimezoneOverride", {"timezoneId": timezone})
+            
+            if lat is not None and lon is not None:
+                self.driver.execute_cdp_cmd("Emulation.setGeolocationOverride", {
+                    "latitude": lat, "longitude": lon, "accuracy": 100
+                })
+            
+            if locale:
+                self.driver.execute_cdp_cmd("Emulation.setLocaleOverride", {"locale": locale})
             
             # Set user agent via CDP for consistency
             if hasattr(self, '_current_user_agent'):
@@ -1412,21 +1284,57 @@ class StealthBrowser:
             # CDP commands may fail on some browser versions, continue anyway
             pass
     
-    def navigate(self, url: str) -> None:
-        """Navigate to a URL with human-like behavior."""
-        self.driver.get(url)
+    def _enable_resource_blocking(self) -> None:
+        """Enable CDP resource blocking for optimized performance."""
+        blocked_patterns = [
+            "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", 
+            "*.css", 
+            "*.woff", "*.woff2", "*.ttf", 
+            "*.mp4", "*.webm", "*.mp3",
+            "*.ico", "*.svg"
+        ]
         
-        # Random wait after page load
-        wait_time = random.uniform(
+        try:
+            self.driver.execute_cdp_cmd("Network.enable", {})
+            self.driver.execute_cdp_cmd("Network.setBlockedURLs", {
+                "urls": blocked_patterns
+            })
+        except: pass
+
+    def navigate(self, url: str) -> None:
+        """Navigate to a URL with human-like timing."""
+        self.driver.get(url)
+        # Random post-load wait
+        time.sleep(random.uniform(
             self.stealth_config.min_page_load_wait,
             self.stealth_config.max_page_load_wait
+        ))
+
+    def move_to(self, x: int, y: int, click: bool = False) -> None:
+        """Move mouse to coordinates (Proxy for HumanMouseSimulator)."""
+        if self.mouse:
+            self.mouse.move_to(x, y, click)
+            
+    def click(self) -> None:
+        """Click at current position (Proxy)."""
+        if self.mouse:
+            self.mouse._human_click()
+            
+    def type_text(self, text: str) -> None:
+        """Type text with human-like logic (Proxy)."""
+        if self.typing:
+            self.typing.type_text(text)
+
+    def save_screenshot(self, path: str) -> None:
+        """Save a screenshot."""
+        self.driver.save_screenshot(path)
+            
+    def wait_for(self, selector: str, timeout: int = 10) -> Any:
+        """Wait for an element to appear (CSS Selector)."""
+        return WebDriverWait(self.driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
         )
-        time.sleep(wait_time)
-        
-        # Possible random scroll after load
-        if random.random() < 0.3:
-            self.scroll.scroll_page("down", random.uniform(0.1, 0.3))
-    
+
     def wait_for_element(
         self,
         by: By,
@@ -1463,24 +1371,83 @@ class StealthBrowser:
         self.random_pause(0.2, 0.5)
         self.typing.type_text(element, text)
     
-    def random_pause(
-        self,
-        min_time: Optional[float] = None,
-        max_time: Optional[float] = None
-    ) -> None:
-        """Take a random pause."""
-        min_t = min_time or self.behavior_config.min_action_pause
-        max_t = max_time or self.behavior_config.max_action_pause
+    def random_pause(self, min_time: Optional[float] = None, max_time: Optional[float] = None) -> None:
+        """Wait for a random amount of time with optional 'idle entropy' (micro-moves)."""
+        p_min = min_time if min_time is not None else self.behavior_config.min_action_pause
+        p_max = max_time if max_time is not None else self.behavior_config.max_action_pause
         
-        pause_time = random.uniform(min_t, max_t)
+        pause_time = random.uniform(p_min, p_max)
         
         # Chance for longer "thinking" pause
         if random.random() < self.behavior_config.random_pause_chance:
             extra_min, extra_max = self.behavior_config.random_pause_duration
             pause_time += random.uniform(extra_min, extra_max)
         
+        # Idle entropy: Occasionally drift the mouse during long pauses
+        if pause_time > 1.0 and random.random() < 0.3:
+            try:
+                drift_x = self.mouse.current_pos[0] + random.randint(-15, 15)
+                drift_y = self.mouse.current_pos[1] + random.randint(-15, 15)
+                self.mouse._micro_move(
+                    max(0, min(drift_x, 1919)), 
+                    max(0, min(drift_y, 1079))
+                )
+            except: pass
+            
         time.sleep(pause_time)
-    
+
+    def _apply_header_consistency(self) -> None:
+        """Ensure HTTP headers match the spoofed locale and identity."""
+        try:
+            headers = {}
+            if self.stealth_config.spoof_locale:
+                headers["Accept-Language"] = f"{self.stealth_config.spoof_locale},en;q=0.9"
+            
+            if headers:
+                self.driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": headers})
+        except:
+            pass
+
+    def simulate_window_switching(self) -> None:
+        """Simulate switching browser tabs or windows (Focus/Blur)."""
+        try:
+            # Simulate "blur" - hide visibility
+            self.driver.execute_cdp_cmd("Page.setWebLifecycleState", {"state": "hidden"})
+            time.sleep(random.uniform(0.5, 2.0))
+            # Simulate "focus" - active visibility
+            self.driver.execute_cdp_cmd("Page.setWebLifecycleState", {"state": "active"})
+        except:
+            pass
+
+    def simulate_shortcut(self, keys: List[str]) -> None:
+        """Simulate a keyboard shortcut using CDP (e.g., ['Control', 'c'])."""
+        try:
+            # Handle modifiers
+            modifiers = 0
+            if 'Control' in keys: modifiers |= 2
+            if 'Shift' in keys: modifiers |= 8
+            if 'Alt' in keys: modifiers |= 1
+            
+            for key in keys:
+                if key in ['Control', 'Shift', 'Alt']: continue
+                
+                # Key Down
+                self.driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+                    "type": "keyDown",
+                    "modifiers": modifiers,
+                    "key": key,
+                    "windowsVirtualKeyCode": 0,
+                })
+                time.sleep(random.uniform(0.05, 0.1))
+                # Key Up
+                self.driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+                    "type": "keyUp",
+                    "modifiers": modifiers,
+                    "key": key,
+                })
+        except:
+            pass
+        
     def simulate_reading(self, word_count: Optional[int] = None) -> None:
         """Simulate reading content on the page."""
         if word_count is None:
@@ -1588,34 +1555,77 @@ class StealthBrowser:
         self.close()
 
 
-# Convenience function
-def create_stealth_browser(**kwargs) -> StealthBrowser:
-    """Create a stealth browser with optional custom configuration."""
-    behavior_config = HumanBehaviorConfig(**{
-        k: v for k, v in kwargs.items()
-        if hasattr(HumanBehaviorConfig, k)
-    })
-    stealth_config = StealthConfig(**{
-        k: v for k, v in kwargs.items()
-        if hasattr(StealthConfig, k)
-    })
-    return StealthBrowser(behavior_config, stealth_config)
+def create_stealth_browser(
+    level: Union[StealthLevel, CustomStealthLevel] = StealthLevel.MEDIUM,
+    identity: Optional[StealthIdentity] = None,
+    location: Optional[StealthLocation] = None,
+    headless: Optional[bool] = None,
+    block_resources: Optional[bool] = None,
+    **kwargs
+) -> StealthBrowser:
+    """
+    Factory function to create a configured StealthBrowser.
+    
+    Args:
+        level: Stealth behavior/security level.
+        identity: Identity strategy (GHOST/CONSISTENT).
+        location: Location context (US, UK, Tokyo, etc).
+        headless: Run without UI. If None, uses level config.
+        block_resources: Block images/CSS/fonts. If None, uses level config.
+        **kwargs: Overrides for specific config fields.
+    """
+    behavior, stealth = get_stealth_config(level)
+    
+    # helper: apply override if provided, otherwise respect config (from level)
+    if identity is not None:
+        stealth.identity = identity
+        
+    if location is not None:
+        stealth.location = location
+    
+    if headless is not None:
+        stealth.headless = headless
+    
+    if block_resources is not None:
+        stealth.block_resources = block_resources
+        
+    # Apply direct field overrides from kwargs
+    for k, v in kwargs.items():
+        if hasattr(behavior, k):
+            setattr(behavior, k, v)
+        elif hasattr(stealth, k):
+            setattr(stealth, k, v)
+    
+    return StealthBrowser(
+        behavior_config=behavior,
+        stealth_config=stealth,
+    )
 
 
-def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, StealthConfig]:
+def create_browser_with_level(
+    level: Union[StealthLevel, CustomStealthLevel] = StealthLevel.MEDIUM,
+    **kwargs
+) -> StealthBrowser:
+    """alias for create_stealth_browser for backward compatibility."""
+    return create_stealth_browser(level=level, **kwargs)
+
+
+def get_stealth_config(level: Union[StealthLevel, CustomStealthLevel]) -> Tuple[HumanBehaviorConfig, StealthConfig]:
     """
     Get pre-configured stealth and behavior settings for a given level.
-
-    Args:
-        level: StealthLevel enum (LOW, MEDIUM, HIGH, or PARANOID)
-
-    Returns:
-        Tuple of (HumanBehaviorConfig, StealthConfig)
-
-    Examples:
-        >>> behavior, stealth = get_stealth_config(StealthLevel.HIGH)
-        >>> browser = StealthBrowser(behavior_config=behavior, stealth_config=stealth)
     """
+    # Handle CustomStealthLevel
+    if isinstance(level, CustomStealthLevel):
+        behavior, stealth = get_stealth_config(level.base)
+        for key, value in level.overrides.items():
+            if hasattr(behavior, key):
+                setattr(behavior, key, value)
+            elif hasattr(stealth, key):
+                setattr(stealth, key, value)
+            else:
+                print(f"Warning: Unknown config key '{key}' in CustomStealthLevel overrides.")
+        return behavior, stealth
+
     if level in (StealthLevel.LOW, "low"):
         # Fast, minimal stealth - basic anti-detection only
         behavior = HumanBehaviorConfig(
@@ -1644,33 +1654,76 @@ def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, Stealt
         )
 
     elif level in (StealthLevel.MEDIUM, "medium"):
-        # Balanced - good stealth with reasonable speed (use defaults)
+        # Balanced - good stealth with reasonable speed
         behavior = HumanBehaviorConfig(
+            min_mouse_speed=0.4,
+            max_mouse_speed=1.0,
+            mouse_curve_intensity=0.3,
+            min_typing_delay=0.05,
+            max_typing_delay=0.15,
+            typo_chance=0.005,
+            min_action_pause=0.4,
+            max_action_pause=1.2,
             hesitation_chance=0.01,
         )
         stealth = StealthConfig(
+            use_undetected_chrome=True,
             min_page_load_wait=1.0,
+            max_page_load_wait=3.0,
         )
 
     elif level in (StealthLevel.HIGH, "high"):
         # Maximum stealth - slower but most human-like
         behavior = HumanBehaviorConfig(
-            min_mouse_speed=1.0,
-            max_mouse_speed=3.0,
+            min_mouse_speed=0.8,
+            max_mouse_speed=1.8,
             mouse_curve_intensity=0.4,
             mouse_overshoot_chance=0.25,
             mouse_jitter=True,
-            min_typing_delay=0.1,
-            max_typing_delay=0.35,
-            typo_chance=0.03,
+            min_typing_delay=0.08,
+            max_typing_delay=0.25,
+            typo_chance=0.015,
             min_action_pause=0.5,
-            max_action_pause=3.0,
-            random_pause_chance=0.2,
-            random_pause_duration=(3.0, 10.0),
-            reading_speed_wpm=200,
-            reading_variance=0.4,
+            max_action_pause=2.0,
+            random_pause_chance=0.15,
+            random_pause_duration=(2.0, 5.0),
+            reading_speed_wpm=220,
+            reading_variance=0.3,
             hesitation_chance=0.10,
             text_selection_chance=0.05,
+        )
+
+        stealth = StealthConfig(
+            use_undetected_chrome=True,
+            randomize_viewport=True,
+            mask_automation_indicators=True,
+            randomize_request_timing=True,
+            min_page_load_wait=3.0,
+            max_page_load_wait=6.0,
+            disable_webrtc=True,
+            disable_notifications=True,
+            use_selenium_stealth=True,
+        )
+    
+    elif level in (StealthLevel.PARANOID, "paranoid"):
+        # Paranoid - Extreme stealth, forced headful
+        behavior = HumanBehaviorConfig(
+            min_mouse_speed=1.2,
+            max_mouse_speed=2.5,
+            mouse_curve_intensity=0.6,
+            mouse_overshoot_chance=0.4,
+            mouse_jitter=True,
+            hesitation_chance=0.2,
+            min_typing_delay=0.12,
+            max_typing_delay=0.35,
+            typo_chance=0.04,
+            min_action_pause=1.0,
+            max_action_pause=3.0,
+            random_pause_chance=0.25,
+            random_pause_duration=(3.0, 8.0),
+            reading_speed_wpm=180,
+            reading_variance=0.4,
+            text_selection_chance=0.2,
         )
 
         stealth = StealthConfig(
@@ -1683,87 +1736,31 @@ def get_stealth_config(level: StealthLevel) -> Tuple[HumanBehaviorConfig, Stealt
             disable_webrtc=True,
             disable_notifications=True,
             use_selenium_stealth=True,
-        )
-    
-    elif level in (StealthLevel.PARANOID, "paranoid"):
-        # Paranoid - Extreme stealth, forced headful
-        behavior = HumanBehaviorConfig(
-            min_mouse_speed=1.5,
-            max_mouse_speed=4.0,
-            mouse_curve_intensity=0.6,
-            mouse_overshoot_chance=0.4,
-            mouse_jitter=True,
-            hesitation_chance=0.3,
-            min_typing_delay=0.15,
-            max_typing_delay=0.40,
-            typo_chance=0.05,
-            min_action_pause=1.0,
-            max_action_pause=4.0,
-            random_pause_chance=0.3,
-            random_pause_duration=(4.0, 12.0),
-            reading_speed_wpm=150,
-            reading_variance=0.5,
-            text_selection_chance=0.2,
-        )
-
-        stealth = StealthConfig(
-            use_undetected_chrome=True,
-            randomize_viewport=True,
-            mask_automation_indicators=True,
-            randomize_request_timing=True,
-            min_page_load_wait=5.0,
-            max_page_load_wait=10.0,
-            disable_webrtc=True,
-            disable_notifications=True,
-            use_selenium_stealth=True,
             block_images=False, # Images needed for realistic rendering
         )
+    elif level in (StealthLevel.FAST, "fast"):
+        # Instant - for high throughput API-like scraping
+        behavior = HumanBehaviorConfig(
+            min_mouse_speed=0.0,
+            max_mouse_speed=0.0, # Teleport
+            min_typing_delay=0.0,
+            max_typing_delay=0.0,
+            typo_chance=0.0,
+            min_action_pause=0.0,
+            max_action_pause=0.05,
+            random_pause_chance=0.0,
+        )
+        stealth = StealthConfig(
+            use_undetected_chrome=True,
+            mask_automation_indicators=True,
+            min_page_load_wait=0.1,
+            max_page_load_wait=0.5,
+            headless=True,
+            block_resources=True
+        )
     else:
-        raise ValueError(f"Invalid stealth level: {level}. Use StealthLevel.LOW, MEDIUM, HIGH, or PARANOID")
+        raise ValueError(f"Invalid stealth level: {level}")
 
     return behavior, stealth
 
 
-def create_browser_with_level(
-    level: StealthLevel,
-    proxy_config: Optional[ProxyConfig] = None,
-    **overrides
-) -> StealthBrowser:
-    """
-    Create a stealth browser with a preset stealth level.
-
-    Args:
-        level: StealthLevel enum (LOW, MEDIUM, HIGH, or PARANOID)
-        proxy_config: Optional ProxyConfig for proxy settings
-        **overrides: Additional config overrides (e.g., spoof_timezone="America/New_York")
-
-    Returns:
-        Configured StealthBrowser instance
-
-    Examples:
-        >>> # Simple usage with preset level
-        >>> with create_browser_with_level(StealthLevel.HIGH) as browser:
-        ...     browser.navigate("https://example.com")
-
-        >>> # With custom overrides
-        >>> with create_browser_with_level(
-        ...     StealthLevel.MEDIUM,
-        ...     spoof_timezone="Europe/London",
-        ...     spoof_geolocation=(51.5074, -0.1278)
-        ... ) as browser:
-        ...     browser.navigate("https://example.com")
-    """
-    behavior, stealth = get_stealth_config(level)
-
-    # Apply overrides to stealth config
-    for key, value in overrides.items():
-        if hasattr(stealth, key):
-            setattr(stealth, key, value)
-        elif hasattr(behavior, key):
-            setattr(behavior, key, value)
-
-    return StealthBrowser(
-        behavior_config=behavior,
-        stealth_config=stealth,
-        proxy_config=proxy_config
-    )

@@ -5,7 +5,7 @@ import traceback
 import random
 import os
 from dotenv import load_dotenv
-from stealth_scraper import StealthBrowser, StealthConfig, ProxyConfig
+from stealth_scraper import StealthBrowser, StealthConfig
 from selenium.webdriver.common.by import By
 
 # Load environment variables
@@ -130,47 +130,8 @@ def test_hard_target_cloudflare():
 
 def test_proxy_integration():
     """Test DataImpulse proxy integration if credentials exist."""
-    logger.info("\nTesting Proxy Integration")
-    
-    username = os.getenv("DATAIMPULSE_USERNAME")
-    password = os.getenv("DATAIMPULSE_PASSWORD")
-    
-    if not username or not password:
-        logger.warning("⚠️ Proxy credentials not found in .env. Skipping proxy test.")
-        return True # Skip but consider passed/ignored
-        
-    try:
-        proxy_config = ProxyConfig(
-            enabled=True,
-            username=username,
-            password=password,
-            country="us"
-        )
-        
-        with StealthBrowser(proxy_config=proxy_config) as browser:
-            logger.info("Checking IP via httpbin...")
-            browser.navigate("https://httpbin.org/ip")
-            time.sleep(2)
-            
-            try:
-                body = browser.driver.find_element(By.TAG_NAME, "pre").text
-                logger.info(f"Proxy IP Response: {body}")
-                if "origin" in body:
-                    logger.info("✅ Proxy Test PASSED")
-                    return True
-            except:
-                body = browser.driver.find_element(By.TAG_NAME, "body").text
-                logger.info(f"Proxy Body: {body}")
-                if "origin" in body:
-                    logger.info("✅ Proxy Test PASSED")
-                    return True
-                
-            logger.error("❌ Proxy Test FAILED: 'origin' not found in response")
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ Proxy Test ERROR: {str(e)}")
-        return False
+    logger.info("\nTesting Proxy Integration - SKIPPED (ProxyConfig removed in v1.2.0)")
+    return True
 
 def test_human_behavior():
     """Test human-like interactions: mouse, scroll, typing."""

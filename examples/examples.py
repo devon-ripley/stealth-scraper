@@ -181,7 +181,25 @@ def example_infinite_scroll_page():
             
             print(f"Scroll {i+1}: {len(collected_items)} items collected")
         
-        return list(collected_items)
+    return list(collected_items)
+
+
+def example_advanced_stealth_features():
+    """Example using advanced human behavior features."""
+    with StealthBrowser() as browser:
+        browser.navigate("https://example.com")
+        
+        # Simulate window switching (Tab away and back)
+        print("Simulating window switch...")
+        browser.simulate_window_switching()
+        
+        # Simulate keyboard shortcuts
+        print("Simulating keyboard shortcut (Ctrl+C)...")
+        browser.simulate_shortcut(["Control", "c"])
+        
+        # Human reading with natural pauses and micro-movements (idle entropy)
+        print("Simulating deep reading...")
+        browser.simulate_reading(word_count=300)
 
 
 def example_with_persistent_profile():
