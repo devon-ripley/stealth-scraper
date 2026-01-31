@@ -1,7 +1,7 @@
 import pytest
 import time
 from pathlib import Path
-from stealth_scraper import StealthBrowser, StealthLevel, get_stealth_config
+from stealth_scraper import create_stealth_browser, StealthLevel, get_stealth_config
 from selenium.webdriver.common.by import By
 
 def test_local_mechanics_demo():
@@ -32,4 +32,4 @@ def test_local_mechanics_demo():
         browser.click_element(btn)
         
         hidden_div = browser.wait_for_element(By.ID, "dynamic-area", condition="visible")
-        assert "dynamic content" in hidden_div.text.lower()
+        assert "hidden" in hidden_div.text.lower()

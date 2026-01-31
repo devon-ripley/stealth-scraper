@@ -57,9 +57,13 @@ def test_language_header_consistency():
         traffic = browser.network.get_traffic()
         request_headers = {}
         for event in traffic:
-            if 'request' in event and 'headers' in event['request']:
-                request_headers = event['request']['headers']
-                break
+            if 'params' in event and 'request' in event['params']:
+                if 'headers' in event['params']['request']:
+                    url = event['params']['request'].get('url', '')
+                    # Skip chrome:// internal requests
+                    if not url.startswith('chrome'):
+                        request_headers = event['params']['request']['headers']
+                        break
         
         accept_lang = request_headers.get('accept-language', '') or request_headers.get('Accept-Language', '')
         nav_langs_list = browser.execute_script("return navigator.languages")

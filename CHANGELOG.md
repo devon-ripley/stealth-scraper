@@ -2,6 +2,25 @@
 
 All notable changes to **Ultimate Stealth Web Scraper** will be documented in this file.
 
+## [1.4.1] - 2026-01-31
+### Fixed
+- **GHOST Mode Fingerprinting**: Fixed fingerprint randomization to produce unique hardware profiles (concurrency/memory) on each browser instance.
+- **Mobile Touch Support**: Corrected `maxTouchPoints` property to use `is_mobile` flag instead of `emulate_touch`, ensuring mobile devices report touch capability correctly.
+- **Accept-Language Header**: Implemented consistent language header injection via CDP for both mobile and desktop browsers.
+- **Test Suite Improvements**:
+  - Fixed import error in `test_local_mechanics.py`.
+  - Added navigation trigger for stealth script injection in `test_fingerprint_consistency.py`.
+  - Corrected network event structure parsing in `test_ua_consistency.py`.
+  - Test success rate improved from 85% to 96% (52/54 passing).
+
+### Technical Details
+- Enhanced `_inject_stealth_scripts()` to use time-based RNG seed for GHOST mode randomization.
+- Added `_apply_header_consistency()` call in browser startup sequence.
+- Updated `stealth.js` navigator property masking logic for better mobile device simulation.
+
+### Known Limitations
+- Network body capture on mobile devices has limited support due to standard Selenium CDP constraints (architectural limitation, not a regression).
+
 ## [1.4.0] - 2026-01-30
 ### Added
 - **Perfect Masking**: Upgraded `navigator.webdriver` masking to be undetectable by advanced prototype checks ("Sannysoft New").

@@ -3,7 +3,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Selenium](https://img.shields.io/badge/selenium-4.15+-green.svg)](https://selenium.dev)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-54%2F54%20passed-success)](tests/)
+[![Tests](https://img.shields.io/badge/tests-52%2F54%20passed-success)](tests/)
 
 > **Undetectable web scraping with human-like behavior simulation.**
 

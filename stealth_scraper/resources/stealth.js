@@ -75,12 +75,9 @@ window.chrome = {
 
 const originalQuery = window.navigator.permissions.query;
 window.navigator.permissions.query = (parameters) => {
-    if (parameters.name === 'notifications') {
-        return Promise.resolve({ state: Notification.permission });
-    }
-    if (['geolocation', 'camera', 'microphone'].includes(parameters.name)) {
-        return Promise.resolve({ state: 'prompt' });
-    }
+    // Pass through to native to avoid detection of the shim itself
+    // unless we strictly need to hide a denied state.
+    // Since we cleared flags, 'prompt' should be default.
     return originalQuery(parameters);
 };
 
@@ -95,22 +92,35 @@ const makePluginArray = () => {
         { name: "Native Client", filename: "internal-nacl-plugin", description: "" }
     ];
 
-    const pluginArray = {
-        length: plugins.length,
-        item: (i) => pluginArray[i] || null,
-        namedItem: (name) => plugins.find(p => p.name === name) || null,
-        refresh: () => { }
-    };
-
-    plugins.forEach((p, i) => {
-        const plugin = {
-            name: p.name,
-            filename: p.filename,
-            description: p.description,
-            enabledPlugin: pluginArray
-        };
-        pluginArray[i] = plugin;
+    // Generic PluginArray shim using Array base (closest authentic behavior)
+    const pluginArray = plugins.map(p => {
+        const plugin = Object.create(Plugin.prototype);
+        Object.defineProperties(plugin, {
+            name: { value: p.name, writable: false, enumerable: false },
+            filename: { value: p.filename, writable: false, enumerable: false },
+            description: { value: p.description, writable: false, enumerable: false },
+            length: { value: 1, writable: false, enumerable: false },
+        });
+        Object.defineProperty(plugin, Symbol.toStringTag, { value: 'Plugin', writable: false, enumerable: false, configurable: true });
+        return plugin;
     });
+
+    // Magic: Make the array look like a PluginArray
+    Object.setPrototypeOf(pluginArray, PluginArray.prototype);
+
+    // Add named access
+    plugins.forEach((p, i) => {
+        Object.defineProperty(pluginArray, p.name, { value: pluginArray[i], writable: false, enumerable: false });
+    });
+
+    // Add required methods
+    Object.defineProperties(pluginArray, {
+        item: { value: (i) => pluginArray[i] || null, writable: false, enumerable: false },
+        namedItem: { value: (name) => pluginArray.find(p => p.name === name) || null, writable: false, enumerable: false },
+        refresh: { value: () => { }, writable: false, enumerable: false }
+    });
+
+    Object.defineProperty(pluginArray, Symbol.toStringTag, { value: 'PluginArray', writable: false, enumerable: false, configurable: true });
 
     return pluginArray;
 };
@@ -120,21 +130,30 @@ const makeMimeTypeArray = () => {
         { type: "application/pdf", suffixes: "pdf", description: "", snippets: ["pdf"] }
     ];
 
-    const mimeArray = {
-        length: mimes.length,
-        item: (i) => mimeArray[i] || null,
-        namedItem: (name) => mimes.find(m => m.type === name) || null
-    };
+    const mimeArray = mimes.map(m => {
+        const mime = Object.create(MimeType.prototype);
+        Object.defineProperties(mime, {
+            type: { value: m.type, writable: false, enumerable: false },
+            suffixes: { value: m.suffixes, writable: false, enumerable: false },
+            description: { value: m.description, writable: false, enumerable: false },
+            enabledPlugin: { value: null, writable: false, enumerable: false }
+        });
+        Object.defineProperty(mime, Symbol.toStringTag, { value: 'MimeType', writable: false, enumerable: false, configurable: true });
+        return mime;
+    });
+
+    Object.setPrototypeOf(mimeArray, MimeTypeArray.prototype);
 
     mimes.forEach((m, i) => {
-        const mime = {
-            type: m.type,
-            suffixes: m.suffixes,
-            description: m.description,
-            enabledPlugin: null // ideally point to a plugin
-        };
-        mimeArray[i] = mime;
+        Object.defineProperty(mimeArray, m.type, { value: mimeArray[i], writable: false, enumerable: false });
     });
+
+    Object.defineProperties(mimeArray, {
+        item: { value: (i) => mimeArray[i] || null, writable: false, enumerable: false },
+        namedItem: { value: (name) => mimeArray.find(m => m.type === name) || null, writable: false, enumerable: false }
+    });
+
+    Object.defineProperty(mimeArray, Symbol.toStringTag, { value: 'MimeTypeArray', writable: false, enumerable: false, configurable: true });
 
     return mimeArray;
 };
@@ -198,7 +217,7 @@ Object.defineProperty(navigator, 'vendor', {
 });
 
 Object.defineProperty(navigator, 'maxTouchPoints', {
-    get: () => STEALTH_CONFIG.emulate_touch ? 5 : 0,
+    get: () => STEALTH_CONFIG.is_mobile ? 5 : 0,
     configurable: true
 });
 
@@ -210,9 +229,15 @@ const originalGetContext = HTMLCanvasElement.prototype.getContext;
 HTMLCanvasElement.prototype.getContext = function (type, attributes) {
     const context = originalGetContext.call(this, type, attributes);
     if (type === '2d' && context) {
+        // Apply entropy immediately from Config (controlled by Python seed)
+        // Use 0.001 as minimum to avoid clamping if config is missing
+        context.shadowBlur = (STEALTH_CONFIG.canvas_noise || 0.001);
+
         const originalFillText = context.fillText.bind(context);
         context.fillText = function (...args) {
-            context.shadowBlur = Math.random() * STEALTH_CONFIG.canvas_noise;
+            // For fillText, we can slightly jitter it if desired, but for consistency mode we must be careful.
+            // Safest to keep it stable or use a deterministic modifier.
+            // Ideally, text rendering is noisy enough due to shadowBlur having a value.
             return originalFillText(...args);
         };
     }

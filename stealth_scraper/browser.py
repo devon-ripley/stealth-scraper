@@ -71,12 +71,18 @@ class StealthBrowser:
         self.behavior_config = behavior_config or HumanBehaviorConfig()
         self.stealth_config = stealth_config or StealthConfig()
         
-        # Initialize RNG for deterministic identity if seed provided
+        # Initialize RNG for deterministic identity        # Seed the RNG
         if self.stealth_config.identity_seed:
             self._rng = random.Random(self.stealth_config.identity_seed)
         else:
-            self._rng = random
+            # Use OS entropy to avoid time-based collisions (Windows <15ms resolution)
+            try:
+                seed = os.urandom(16)
+            except NotImplementedError:
+                seed = str(time.time())
+            self._rng = random.Random(seed)
             
+        # Detect device detection early
         self._proxy_manager = ProxyManager.from_input(proxy)
         self.network = None # Initialized in start()
         self.driver = None
@@ -244,6 +250,9 @@ class StealthBrowser:
             languages = ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-US,en;q=0.9,es;q=0.8"]
             options.add_argument(f"--lang={self._rng.choice(languages)}")
         
+        # Standard Selenium Hardening (Critical for non-UC Mobile)
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        
         # ========================================
         # PERSISTENT PROFILE
         # ========================================
@@ -314,6 +323,30 @@ class StealthBrowser:
         # Note: For UC, we need to ensure this is passed correctly
         options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
         
+        # Native Mobile Emulation
+        if getattr(self, "_is_mobile", False):
+            mobile_emulation = {
+                "userAgent": self._current_user_agent,
+                "deviceMetrics": {
+                    "width": int(self._target_viewport[0]) if self._target_viewport else 360,
+                    "height": int(self._target_viewport[1]) if self._target_viewport else 640,
+                    "pixelRatio": 3.0
+                }
+            }
+            options.add_experimental_option("mobileEmulation", mobile_emulation)
+        
+        # Native Mobile Emulation
+        if getattr(self, "_is_mobile", False):
+            mobile_emulation = {
+                "userAgent": self._current_user_agent,
+                "deviceMetrics": {
+                    "width": int(self._target_viewport[0]) if self._target_viewport else 360,
+                    "height": int(self._target_viewport[1]) if self._target_viewport else 640,
+                    "pixelRatio": 3.0
+                }
+            }
+            options.add_experimental_option("mobileEmulation", mobile_emulation)
+        
         return options
     
     def _inject_stealth_scripts(self) -> None:
@@ -323,20 +356,28 @@ class StealthBrowser:
         if self.stealth_config.identity == StealthIdentity.CONSISTENT:
             # Priority: explicit seed > profile path > stable default
             seed = self.stealth_config.identity_seed or self.stealth_config.profile_path or "stable-seed"
-        
-        # Generator for seeded values
-        rng = random.Random(seed) if seed else random
+            rng = random.Random(seed)
+        else:
+            # For GHOST mode, use time-based seed for true randomization
+            import time
+            rng = random.Random(time.time())
+
+        # WebGL Constants
+        if getattr(self, "_is_mobile", False):
+            webgl_vendors = ["Qualcomm", "ARM", "Apple Inc."]
+            webgl_renderers = ["Adreno (TM) 640", "Mali-G76", "Apple GPU"]
+        else:
+            webgl_vendors = ["Intel Inc.", "NVIDIA Corporation"]
+            webgl_renderers = ["Intel Iris OpenGL Engine", "Intel(R) UHD Graphics 620", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 Direct3D11)"]
         
         # Pre-calculate seeded constants for injection
         inject_vars = {
-            "webgl_vendor": rng.choice(["Intel Inc.", "Google Inc.", "NVIDIA Corporation"]),
-            "webgl_renderer": rng.choice([
-                "Intel Iris OpenGL Engine",
-                "Intel(R) UHD Graphics 620",
-                "ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 Direct3D11)"
-            ]),
-            "canvas_noise": rng.uniform(0.001, 0.005),
+            "webgl_vendor": rng.choice(webgl_vendors),
+            "webgl_renderer": rng.choice(webgl_renderers),
+            "canvas_noise": rng.uniform(0.1, 0.5), # Visible noise for Ghost Mode variance
             "audio_noise": rng.uniform(0.0001, 0.0005),
+            "hardware_concurrency": rng.choice([4, 8, 12, 16]),
+            "device_memory": rng.choice([4, 8, 16, 32]),
             "is_mobile": getattr(self, "_is_mobile", False),
             "emulate_touch": self.stealth_config.emulate_touch if self.stealth_config.emulate_touch is not None else getattr(self, "_is_mobile", False),
             "mask_plugins": self.stealth_config.mask_plugins
@@ -386,9 +427,13 @@ class StealthBrowser:
     
     def start(self) -> 'StealthBrowser':
         """Initialize the stealth browser."""
-        options = self._get_stealth_options()
+        # Detect device profile early (before options are built)
+        self._detect_device_settings()
         
-        if self.stealth_config.use_undetected_chrome:
+        options = self._get_stealth_options()
+
+        # Force Standard Selenium for Mobile (UC crashes with mobileEmulation)
+        if self.stealth_config.use_undetected_chrome and not getattr(self, "_is_mobile", False):
             try:
                 # Use webdriver_manager to get the definitely-correct driver path
                 driver_path = ChromeDriverManager().install()
@@ -431,6 +476,7 @@ class StealthBrowser:
                 options=options
             )
         
+
         # Enforce viewport size if specified
         if self.driver and self._target_viewport:
             try:
@@ -438,7 +484,8 @@ class StealthBrowser:
             except: pass
 
         # Apply selenium-stealth if available and enabled
-        if SELENIUM_STEALTH_AVAILABLE and self.stealth_config.use_selenium_stealth:
+        # SKIP FOR MOBILE: selenium-stealth forces Desktop artifacts (plugins, etc) that conflict with Mobile emulation
+        if SELENIUM_STEALTH_AVAILABLE and self.stealth_config.use_selenium_stealth and not self._is_mobile:
             self._apply_selenium_stealth()
         
         # Inject stealth scripts via CDP
@@ -447,6 +494,79 @@ class StealthBrowser:
         
         # Apply CDP-based configurations
         self._apply_cdp_configurations()
+
+        # Apply header consistency (Accept-Language, etc.)
+        self._apply_header_consistency()
+
+        # Inject mouse visualizer if requested
+        if self.stealth_config.visualize_mouse:
+            self._inject_cursor_visualizer()
+
+        # Initialize simulators
+        self.mouse = HumanMouseSimulator(self.driver, self.behavior_config)
+        self.scroll = HumanScrollSimulator(self.driver, self.behavior_config)
+        self.typing = HumanTypingSimulator(self.driver, self.behavior_config)
+
+        # Initialize Network Manager
+        self.network = NetworkManager(self.driver)
+
+        return self
+
+    def _detect_device_settings(self) -> None:
+        """Analyze User-Agent and Config to determine device profile/platform."""
+        # 1. Determine User-Agent
+        if self.stealth_config.user_agent:
+            self._current_user_agent = self.stealth_config.user_agent
+        elif not self._current_user_agent:
+            # Check for Mobile override
+            if self.stealth_config.is_mobile:
+                self._is_mobile = True
+                
+                # Deterministic User Agent for Consistent Identity
+                if self.stealth_config.identity_seed:
+                    # Pick from a fixed pool deterministically
+                    mobile_pool = [
+                        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36",
+                        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36",
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+                    ]
+                    # Seed RNG is already init? No, self._rng depends on _detect_device_settings call order?
+                    # _detect_device_settings is called FIRST. _rng is not yet init?
+                    # We must establish seed locally.
+                    local_rng = random.Random(self.stealth_config.identity_seed)
+                    self._current_user_agent = local_rng.choice(mobile_pool)
+                else:
+                    ua = UserAgent(platforms=['mobile']) # Force mobile UA
+                    self._current_user_agent = ua.random
+            
+            # Check for Desktop
+            else:
+                if self.stealth_config.identity_seed:
+                    desktop_pool = [
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+                    ]
+                    local_rng = random.Random(self.stealth_config.identity_seed)
+                    self._current_user_agent = local_rng.choice(desktop_pool)
+                else:
+                    try:
+                        ua = UserAgent(browsers=['chrome'])
+                        self._current_user_agent = ua.random
+                    except:
+                        # Fallback if fake_useragent fails
+                        self._current_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+        else:
+             self._current_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            
+        # 2. Determine Mobile Status
+        if self.stealth_config.is_mobile is not None:
+             self._is_mobile = self.stealth_config.is_mobile
+        else:
+             # Heuristic detection
+             mobile_keywords = ['Android', 'iPhone', 'iPad', 'Mobile']
+             self._is_mobile = any(k in self._current_user_agent for k in mobile_keywords)
         
         # Inject mouse visualizer if requested
         if self.stealth_config.visualize_mouse:
@@ -464,8 +584,19 @@ class StealthBrowser:
     
     def _apply_selenium_stealth(self) -> None:
         """Apply selenium-stealth library configurations."""
-        # WebGL vendors and renderers that look realistic
-        webgl_vendors = ["Intel Inc.", "Google Inc.", "NVIDIA Corporation"]
+        # Mobile-specific WebGL
+        mobile_vendors = ["Qualcomm", "ARM", "Apple Inc."]
+        mobile_renderers = [
+            "Adreno (TM) 640",
+            "Adreno (TM) 660",
+            "Mali-G76",
+            "Mali-G78",
+            "Apple GPU",
+            "Apple A12 GPU",
+        ]
+
+        # Desktop WebGL
+        webgl_vendors = ["Intel Inc.", "NVIDIA Corporation"]
         webgl_renderers = [
             "Intel Iris OpenGL Engine",
             "Intel(R) UHD Graphics 620",
@@ -474,13 +605,25 @@ class StealthBrowser:
             "Mesa DRI Intel(R) UHD Graphics 620 (Kabylake GT2)",
         ]
         
+        # Select based on device type
+        is_mobile = getattr(self, "_is_mobile", False) or (self.stealth_config.is_mobile)
+        
+        if is_mobile:
+            vendors = mobile_vendors
+            renderers = mobile_renderers
+            platform = "Linux armv8l" # Standard mobile platform
+        else:
+            vendors = webgl_vendors
+            renderers = webgl_renderers
+            platform = "Win32"
+
         stealth(
             self.driver,
             languages=["en-US", "en"],
             vendor="Google Inc.",
-            platform="Win32",
-            webgl_vendor=self._rng.choice(webgl_vendors),
-            renderer=self._rng.choice(webgl_renderers),
+            platform=platform,
+            webgl_vendor=self._rng.choice(vendors),
+            renderer=self._rng.choice(renderers),
             fix_hairline=True,
             run_on_insecure_origins=False,
         )
@@ -515,7 +658,7 @@ class StealthBrowser:
                 # Grant permission for the current origin (or all origins if needed)
                 try:
                     self.driver.execute_cdp_cmd("Browser.grantPermissions", {
-                        "permissions": ["geolocation"]
+                        "permissions": ["geolocation", "notifications"]
                     })
                 except: pass
             
@@ -523,7 +666,10 @@ class StealthBrowser:
                 self.driver.execute_cdp_cmd("Emulation.setLocaleOverride", {"locale": locale})
             
             # Set user agent via CDP for consistency
-            if hasattr(self, '_current_user_agent'):
+            # SKIP FOR MOBILE (Native Emulation handles this better)
+            # Only override if NOT mobile, or if we need to force specific headers on mobile 
+            # (but usually mobileEmulation covers it)
+            if hasattr(self, '_current_user_agent') and not getattr(self, "_is_mobile", False):
                 # Platform sync for UA-Sync
                 if self.stealth_config.spoof_platform:
                     platform_info = self.stealth_config.spoof_platform
@@ -747,13 +893,14 @@ class StealthBrowser:
     def _apply_header_consistency(self) -> None:
         """Ensure HTTP headers match the spoofed locale and identity."""
         try:
-            headers = {}
-            if self.stealth_config.spoof_locale:
-                headers["Accept-Language"] = f"{self.stealth_config.spoof_locale},en;q=0.9"
-            
-            if headers:
-                self.driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": headers})
-        except:
+            # Set Accept-Language header based on locale (spoofed or default)
+            locale = self.stealth_config.spoof_locale or "en-US"
+            headers = {"Accept-Language": f"{locale},en;q=0.9"}
+
+            self.driver.execute_cdp_cmd("Network.enable", {})
+            self.driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": headers})
+        except Exception as e:
+            # Silently fail if CDP not supported
             pass
 
     def simulate_window_switching(self) -> None:
