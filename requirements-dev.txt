@@ -1,0 +1,8 @@
+
+# Development and Testing Dependencies
+pytest>=7.4.0
+pytest-cov>=4.1.0
+build>=1.0.0
+twine>=4.0.0
+setuptools>=61.0
+wheel>=0.40.0

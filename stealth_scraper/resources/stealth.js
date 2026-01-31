@@ -1,15 +1,20 @@
 const STEALTH_CONFIG = "__STEALTH_CONFIG__";
 
-// ========================================
-// WEBDRIVER PROPERTY MASKING
-// ========================================
+(function () {
+    const newProto = Object.getPrototypeOf(navigator);
+    if (Object.getOwnPropertyDescriptor(newProto, 'webdriver')) {
+        delete newProto.webdriver;
+    }
+    Object.defineProperty(newProto, 'webdriver', {
+        get: () => false,
+        enumerable: true,
+        configurable: true
+    });
 
-Object.defineProperty(navigator, 'webdriver', {
-    get: () => undefined,
-    configurable: true
-});
-
-delete navigator.__proto__.webdriver;
+    if (Object.getOwnPropertyDescriptor(navigator, 'webdriver')) {
+        delete navigator.webdriver;
+    }
+})();
 
 // ========================================
 // CHROME RUNTIME MASKING
@@ -69,39 +74,104 @@ window.chrome = {
 // ========================================
 
 const originalQuery = window.navigator.permissions.query;
-window.navigator.permissions.query = (parameters) => (
-    parameters.name === 'notifications' ?
-        Promise.resolve({ state: Notification.permission }) :
-        originalQuery(parameters)
-);
+window.navigator.permissions.query = (parameters) => {
+    if (parameters.name === 'notifications') {
+        return Promise.resolve({ state: Notification.permission });
+    }
+    if (['geolocation', 'camera', 'microphone'].includes(parameters.name)) {
+        return Promise.resolve({ state: 'prompt' });
+    }
+    return originalQuery(parameters);
+};
 
 // ========================================
 // PLUGINS MASKING
 // ========================================
 
 const makePluginArray = () => {
-    const plugins = [
+    const plugins = STEALTH_CONFIG.is_mobile ? [] : [
         { name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format" },
         { name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "" },
         { name: "Native Client", filename: "internal-nacl-plugin", description: "" }
     ];
 
-    const pluginArray = Object.create(PluginArray.prototype);
+    const pluginArray = {
+        length: plugins.length,
+        item: (i) => pluginArray[i] || null,
+        namedItem: (name) => plugins.find(p => p.name === name) || null,
+        refresh: () => { }
+    };
+
     plugins.forEach((p, i) => {
-        const plugin = Object.create(Plugin.prototype);
-        plugin.name = p.name;
-        plugin.filename = p.filename;
-        plugin.description = p.description;
+        const plugin = {
+            name: p.name,
+            filename: p.filename,
+            description: p.description,
+            enabledPlugin: pluginArray
+        };
         pluginArray[i] = plugin;
     });
-    pluginArray.length = plugins.length;
+
     return pluginArray;
 };
 
-Object.defineProperty(navigator, 'plugins', {
-    get: () => makePluginArray(),
-    configurable: true
-});
+const makeMimeTypeArray = () => {
+    const mimes = STEALTH_CONFIG.is_mobile ? [] : [
+        { type: "application/pdf", suffixes: "pdf", description: "", snippets: ["pdf"] }
+    ];
+
+    const mimeArray = {
+        length: mimes.length,
+        item: (i) => mimeArray[i] || null,
+        namedItem: (name) => mimes.find(m => m.type === name) || null
+    };
+
+    mimes.forEach((m, i) => {
+        const mime = {
+            type: m.type,
+            suffixes: m.suffixes,
+            description: m.description,
+            enabledPlugin: null // ideally point to a plugin
+        };
+        mimeArray[i] = mime;
+    });
+
+    return mimeArray;
+};
+
+(function () {
+    if (!STEALTH_CONFIG.mask_plugins) return;
+    const newProto = Object.getPrototypeOf(navigator);
+    if (Object.getOwnPropertyDescriptor(newProto, 'plugins')) {
+        delete newProto.plugins;
+    }
+    Object.defineProperty(newProto, 'plugins', {
+        get: () => makePluginArray(),
+        enumerable: true,
+        configurable: true
+    });
+
+    if (Object.getOwnPropertyDescriptor(navigator, 'plugins')) {
+        delete navigator.plugins;
+    }
+})();
+
+(function () {
+    if (!STEALTH_CONFIG.mask_plugins) return;
+    const newProto = Object.getPrototypeOf(navigator);
+    if (Object.getOwnPropertyDescriptor(newProto, 'mimeTypes')) {
+        delete newProto.mimeTypes;
+    }
+    Object.defineProperty(newProto, 'mimeTypes', {
+        get: () => makeMimeTypeArray(),
+        enumerable: true,
+        configurable: true
+    });
+
+    if (Object.getOwnPropertyDescriptor(navigator, 'mimeTypes')) {
+        delete navigator.mimeTypes;
+    }
+})();
 
 // ========================================
 // IDENTITY MASKING (MODULAR)
@@ -118,12 +188,17 @@ Object.defineProperty(navigator, 'deviceMemory', {
 });
 
 Object.defineProperty(navigator, 'platform', {
-    get: () => 'Win32',
+    get: () => STEALTH_CONFIG.is_mobile ? 'Linux armv8l' : 'Win32',
     configurable: true
 });
 
 Object.defineProperty(navigator, 'vendor', {
     get: () => 'Google Inc.',
+    configurable: true
+});
+
+Object.defineProperty(navigator, 'maxTouchPoints', {
+    get: () => STEALTH_CONFIG.emulate_touch ? 5 : 0,
     configurable: true
 });
 

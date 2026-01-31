@@ -169,4 +169,35 @@ with create_stealth_browser() as browser:
         body = browser.network.get_response_body(req_id)
         print(f"Captured JSON response: {body}")
 ```
+### 6. Mobile Stealth & UA-Sync
+The most advanced feature in v1.4.0 is the **UA-Sync Engine**. It automatically detects if you are using a Mobile or Desktop User-Agent and reconfigures the browser environment for a perfect match.
+
+#### Automatic Mobile Mirroring
+Simply use a mobile User-Agent, and the browser will automatically disable plugins, switch to a mobile platform (`Linux armv8l`), enable CDP touch emulation, and enforce a mobile viewport.
+
+```python
+with create_stealth_browser(
+    user_agent="Mozilla/5.0 (Android 10; Mobile; rv:115.0) ..."
+) as browser:
+    # Environment is automatically converted to Mobile Chrome
+    browser.navigate("https://sannysoft.com/proxy")
 ```
+
+#### Explicit Mobile Control
+You can force mobile behavior or customize interaction modes using `StealthConfig`:
+
+```python
+from stealth_scraper import create_stealth_browser, StealthConfig
+
+config = StealthConfig(
+    is_mobile=True,        # Forces 0 plugins & Linux platform
+    emulate_touch=True,    # Converts mouse movements to Touch events
+    spoof_platform="iPhone" # Manual platform override
+)
+
+with create_stealth_browser(stealth_config=config) as browser:
+    browser.navigate("https://example.com")
+```
+
+> [!TIP]
+> Use `emulate_touch=True` even on Desktop User-Agents if you want to scrape sites designed for touch interfaces or tablets without detection.

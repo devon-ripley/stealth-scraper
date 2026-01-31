@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stealth-scraper"
-version = "1.3.0"
+version = "1.4.0"
 description = "Ultimate Stealth Web Scraper Package"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -30,7 +30,7 @@ dependencies = [
 Homepage = "https://github.com/devon-ripley/stealth-scraper"
 
 [tool.setuptools]
-packages = ["stealth_scraper", "stealth_scraper.simulators", "stealth_scraper.utils"]
+packages = ["stealth_scraper", "stealth_scraper.simulators", "stealth_scraper.utils", "stealth_scraper.proxy"]
 
 [tool.setuptools.package-data]
 "stealth_scraper" = ["resources/*.js"]

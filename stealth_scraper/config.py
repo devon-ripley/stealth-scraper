@@ -92,6 +92,7 @@ class StealthConfig:
     location: Optional[StealthLocation] = None
     
     # WebDriver detection evasion
+    user_agent: Optional[str] = None
     remove_webdriver_property: bool = True
     mask_automation_indicators: bool = True
     
@@ -106,6 +107,14 @@ class StealthConfig:
     clear_cookies_chance: float = 0.05
     
     # Advanced stealth options
+    is_mobile: Optional[bool] = None   # Forced mobile/desktop mode (True/False). If None, auto-detects from UA.
+    mobile_viewport_sizes: List[Tuple[int, int]] = field(default_factory=lambda: [
+        (360, 800), (390, 844), (414, 896), (360, 640), (375, 667), (412, 915)
+    ])
+    spoof_platform: Optional[str] = None # Manually override navigator.platform (e.g. "Win32", "Linux armv8l")
+    mask_plugins: bool = True           # Enable UA-aware plugin/mime masking
+    emulate_touch: bool = False  # Enable touch event emulation (CAUTION: May cause hangs in some environments)
+    
     disable_webrtc: bool = True  # Prevent WebRTC IP leak
     spoof_timezone: Optional[str] = None  # e.g., "America/New_York"
     spoof_locale: Optional[str] = None  # e.g., "en-US"

@@ -1,52 +1,49 @@
 # 🥷 Ultimate Stealth Web Scraper
 
-[User Guide](docs/GUIDE.md) | [Configuration](docs/CONFIGURATION.md) | [API Reference](docs/API_REFERENCE.md) | [Stealth Engine](docs/STEALTH_ENGINE.md)
-
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Selenium](https://img.shields.io/badge/selenium-4.15+-green.svg)](https://selenium.dev)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-54%2F54%20passed-success)](tests/)
 
 > **Undetectable web scraping with human-like behavior simulation.**
 
-A powerful Python package that combines advanced anti-detection techniques with realistic human behavior simulation to scrape websites without triggering bot detection systems.
+A powerful Python package that combines advanced anti-detection techniques (fingerprint spoofing, CDP overrides) with realistic human interaction simulation (Bezier mouse curves, typos, reading pauses) to scrape websites without triggering bot detection systems.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Bot%20Detection-Bypassed-success?style=for-the-badge" alt="Bot Detection Bypassed"/>
   <img src="https://img.shields.io/badge/Fingerprint-Masked-success?style=for-the-badge" alt="Fingerprint Masked"/>
-  <img src="https://img.shields.io/badge/Behavior-Human--Like-success?style=for-the-badge" alt="Human-Like Behavior"/>
+  <img src="https://img.shields.io/badge/Mobile-Native-success?style=for-the-badge" alt="Mobile Native"/>
 </p>
 
 ---
 
-## ✨ Features
+## 📚 Documentation
+
+| Resource | Description |
+|----------|-------------|
+| **[User Guide](docs/USER_GUIDE.md)** | Getting started, basic usage, and common workflows. |
+| **[Configuration](docs/CONFIGURATION.md)** | Stealth levels, proxy setups, identity, and behavior tuning. |
+| **[API Reference](docs/API.md)** | Full method listings for Browser, Simulators, and Managers. |
+| **[Internals](docs/INTERNALS.md)** | Deep dive into the "Stealth Engine" and anti-detection layers. |
+| **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Solutions for common issues. |
+
+---
+
+## ✨ Key Features
 
 ### 🛡️ Anti-Detection Arsenal
-
-| Feature | Description |
-|---------|-------------|
-| **Undetected ChromeDriver** | Patched driver that bypasses Cloudflare, DataDome, and more |
-| **WebDriver Masking** | Removes `navigator.webdriver` and automation indicators |
-| **Fingerprint Spoofing** | Randomizes canvas, WebGL, audio, and hardware fingerprints |
-| **WebRTC Protection** | Prevents real IP leakage through WebRTC |
-| **CDP Integration** | Chrome DevTools Protocol for timezone, geolocation & locale spoofing |
-| **Network Stealth** | Synchronizes `Accept-Language` headers with spoofed locale |
-| **Advanced Masking** | Spoofs Font metrics, AudioContext data, and WebGL parameters |
-| **Proxy Support** | HTTP/HTTPS/SOCKS5 with auth, rotation, and geo-location sync |
-| **Network Capture** | Passive CDP logging for traffic inspection (Request/Response/Body) |
+- **Undetected ChromeDriver**: Core bypass integration.
+- **Fingerprint Spoofing**: Canvas, WebGL, Audio, Font, and Hardware noise injection.
+- **Mobile Fidelity**: Automatic `touch`, `platform`, and `viewport` adaptation when using a Mobile UA.
+- **Network Capture**: Passive CDP traffic inspection.
+- **Proxy Engine**: HTTP/SOCKS5 support with Auth, Rotation strategies, and Geo-Location sync.
+- **UA-Sync**: Ensures Headers, JS Runtime, and Navigator properties perfectly match your User-Agent.
 
 ### 🎭 Human Behavior Simulation
-
-| Feature | Description |
-|---------|-------------|
-| **Bezier Mouse Curves** | Natural curved mouse movements, not straight lines |
-| **Variable Speed** | Slow start/end, fast middle — like real hand movement |
-| **Mouse Overshoot** | Occasionally overshoots target and corrects |
-| **Realistic Scrolling** | Smooth or stepped scrolling with random pauses |
-| **Human Typing** | Variable delays, typos with corrections, thinking pauses |
-| **Reading Simulation** | Calculates realistic reading time with natural scrolling |
-| **Window Switching** | Simulates focus/blur events as if user tabbed away |
-| **Idle Entropy** | Mouse makes tiny "micro-movements" instead of freezing when idle |
-| **Keyboard Shortcuts** | Simulates realistic `Ctrl+C`, `Ctrl+T` etc. key presses |
+- **Bezier Mouse**: Natural, curved cursor movements with variable speed errors.
+- **Human Typing**: Realistic keystrokes with typos, corrections, and thought pauses.
+- **Reading Flow**: Simulates "scrolling while reading" rather than instant jumps.
+- **Idle Entropy**: Tiny micro-movements to avoid "dead" idle states.
 
 ---
 
@@ -63,585 +60,50 @@ pip install -r requirements.txt
 ```python
 from stealth_scraper import StealthBrowser
 
+# Uses "Ghost" identity (randomized fingerprint) by default
 with StealthBrowser() as browser:
     browser.navigate("https://example.com")
     browser.simulate_reading()
-    
     print(browser.get_page_source())
 ```
 
-### Form Interaction
+### Using Preset Levels
 
 ```python
-from stealth_scraper import StealthBrowser
-from selenium.webdriver.common.by import By
+from stealth_scraper import create_browser_with_level, StealthLevel
 
-with StealthBrowser() as browser:
-    browser.navigate("https://example.com/login")
-    
-    # Human-like typing with occasional typos
-    username = browser.wait_for_element(By.NAME, "username")
-    browser.type_into(username, "my_username")
-    
-    browser.random_pause()
-    
-    password = browser.wait_for_element(By.NAME, "password")
-    browser.type_into(password, "my_password")
-    
-    # Click with natural mouse movement
-    submit = browser.wait_for_element(By.CSS_SELECTOR, "button[type='submit']")
-    browser.click_element(submit)
-```
-
----
-
-## 🎚️ Preset Stealth Levels
-
-Don't want to configure everything manually? Use preset stealth levels:
-
-### Quick Start with Presets
-
-```python
-from stealth_scraper import StealthLevel, create_browser_with_level
-
-# LOW: Fast, minimal stealth (basic anti-detection only)
-with create_browser_with_level(StealthLevel.LOW) as browser:
-    browser.navigate("https://example.com")
-
-# MEDIUM: Balanced (recommended for most sites)
-with create_browser_with_level(StealthLevel.MEDIUM) as browser:
-    browser.navigate("https://example.com")
-
-# HIGH: Maximum stealth (slower but most human-like)
+# Optimization Levels: FAST, LOW, MEDIUM, HIGH, PARANOID
 with create_browser_with_level(StealthLevel.HIGH) as browser:
-    browser.navigate("https://example.com")
-```
-
-### Modular Configuration (New!)
-
-```python
-from stealth_scraper import create_stealth_browser, StealthIdentity, StealthLocation
-
-# 1. Consistent Identity (Safe for logging in)
-# Uses a deterministic seed so your "hardware" fingerprint looks the same every time
-browser = create_stealth_browser(
-    identity=StealthIdentity.CONSISTENT, 
-    identity_seed="my_google_account_1"
-)
-
-# 2. Location Context (Travel to Tokyo)
-# Auto-sets Timezone, Geolocation, Locale, and Languages
-browser = create_stealth_browser(
-    location=StealthLocation.Tokyo()
-)
-```
-
-### Proxy Support (New!)
-
-Route traffic through proxies with optional geo-location sync:
-
-```python
-from stealth_scraper import create_stealth_browser, Proxy, ProxyConfig
-
-# Simple: Just pass a URL string
-with create_stealth_browser(proxy="http://user:pass@proxy.example.com:8080") as browser:
-    browser.navigate("https://httpbin.org/ip")
-
-# With geo-sync: Auto-match timezone/locale to proxy country
-proxy = Proxy(host="us.proxy.com", port=8080, country="US", username="user", password="pass")
-config = ProxyConfig(enabled=True, proxy=proxy, sync_location=True)
-# Browser automatically uses America/New_York timezone, en-US locale
-
-with create_stealth_browser(proxy=config) as browser:
-    browser.navigate("https://example.com")
-```
-
-### 📡 Network Traffic Capture (New!)
-
-Capture network requests, responses, and payload bodies without detectable MITM proxies:
-
-```python
-with create_stealth_browser() as browser:
-    # 1. Start capturing (passive CDP listeners)
-    browser.network.start_capture(capture_body=True)
-    
-    browser.navigate("https://httpbin.org/json")
-    
-    # 2. Wait for specific requests
-    browser.network.wait_for_request("httpbin.org/json")
-    
-    # 3. Inspect traffic
-    traffic = browser.network.get_traffic()
-    for event in traffic:
-        if event["method"] == "Network.responseReceived":
-            req_id = event["params"]["requestId"]
-            body = browser.network.get_response_body(req_id)
-            print(f"Captured Body: {body[:100]}...")
-```
-
-### Stealth Level Comparison
-
-| Feature | FAST | LOW | MEDIUM | HIGH | PARANOID |
-|---------|------|-----|--------|------|----------|
-| **Mouse Speed** | Instant | 0.3-0.8s | 0.4-1.0s | 0.8-1.8s | 1.2-2.5s |
-| **Mouse Overshoot** | N/A | 5% | 15% | 25% | 40% |
-| **Typing Speed** | Instant | 0.03-0.12s | 0.05-0.15s | 0.08-0.25s | 0.12-0.35s |
-| **Typos** | None | None | 0.5% | 1.5% | 4.0% |
-| **Random Pauses** | None | 2% | 5% | 15% | 25% |
-| **Reading Speed** | N/A | 350 WPM | 250 WPM | 220 WPM | 180 WPM |
-| **Hesitation** | None | None | Low | Medium | High |
-| **Fingerprint** | Minimum | Standard | Masked | Masked + Noise | Maximum |
-
-### ⚠️ Headless vs. Headful: The Trade-off
-
-Running `headless=True` (invisible) is convenient but comes with risks:
-
-| Configuration | Behavioral Stealth | Fingerprint Stealth | Best For |
-| :--- | :--- | :--- | :--- |
-| **High + Headful** | ⭐⭐⭐⭐⭐ (Perfect) | ⭐⭐⭐⭐⭐ (Perfect) | Paranoid sites, Login, Ticketmaster |
-| **High + Headless** | ⭐⭐⭐⭐⭐ (Perfect) | ⭐⭐⭐⭐ (Near Perfect) | Background farming, 95% of sites |
-| **Fast + Headless** | ⭐ (Bot-like) | ⭐⭐⭐⭐ (Near Perfect) | API scraping, Public data |
-
-> **Note**: Even with our advanced patching, **Headless Chrome** has subtle rendering differences (font smoothing, 3D timing) that extremely advanced trackers *can* detect. For maximum safety ("God Mode"), always use `headless=False`.
-
-### Custom Stealth Levels
-For advanced users, you can define your own reusable stealth level by inheriting from a base level and overriding specific settings.
-
-```python
-from stealth_scraper import create_stealth_browser, StealthLevel, CustomStealthLevel
-
-# Define a "Fast but Careful" profile
-# Inherits HIGH stealth (mouse curves) but speeds it up
-MyScraperProfile = CustomStealthLevel(
-    base=StealthLevel.HIGH,
-    
-    # Overrides (Any HumanBehaviorConfig or StealthConfig field)
-    min_mouse_speed=0.1,      # Much faster mouse
-    block_resources=True,     # Block images for speed
-    typo_chance=0.0,          # No typos
-    headless=True             # Invisible
-)
-
-browser = create_stealth_browser(level=MyScraperProfile)
-```
-
-#### Available Settings (Overrides)
-You can override any of these parameters in `CustomStealthLevel`:
-
-**Behavior (HumanMouseSimulator)**
-*   `min_mouse_speed` / `max_mouse_speed` (float): Seconds to move mouse. 0.0 = Teleport.
-*   `mouse_curve_intensity` (float): 0.1 (straight) to 1.0 (wild).
-*   `min_typing_delay` / `max_typing_delay` (float): Seconds between keystrokes.
-*   `typo_chance` (float): 0.0 to 1.0.
-*   `min_action_pause` / `max_action_pause` (float): Seconds to wait after clicking/typing.
-
-**Stealth (Browser Fingerprint)**
-*   `headless` (bool): Run invisible.
-*   `block_resources` (bool): Block images/fonts/CSS.
-*   `mask_automation_indicators` (bool): Hide `navigator.webdriver`.
-*   `disable_webrtc` (bool): Prevent IP leak.
-*   `spoof_user_agent` (bool): Use real-world UA.
-*   `use_selenium_stealth` (bool): Enable extra detected-chromedriver patches.
-
-### With Custom Overrides
-
-```python
-# Start with a preset and add custom spoofing
-with create_browser_with_level(
-    StealthLevel.MEDIUM,
-    spoof_timezone="America/New_York",
-    spoof_geolocation=(40.7128, -74.0060),
-    spoof_locale="en-US"
-) as browser:
-    browser.navigate("https://example.com")
-```
-
-### Manual Configuration from Preset
-
-```python
-from stealth_scraper import get_stealth_config, StealthBrowser, StealthLevel
-
-# Get preset configurations
-behavior, stealth = get_stealth_config(StealthLevel.HIGH)
-
-# Modify as needed
-stealth.spoof_timezone = "Europe/London"
-behavior.reading_speed_wpm = 180
-
-# Use modified config
-with StealthBrowser(behavior_config=behavior, stealth_config=stealth) as browser:
-    browser.navigate("https://example.com")
-```
-
----
-
-## ⚙️ Configuration
-
-### Human Behavior Settings
-
-```python
-from stealth_scraper import StealthBrowser, HumanBehaviorConfig
-
-config = HumanBehaviorConfig(
-    # Mouse
-    min_mouse_speed=0.5,
-    max_mouse_speed=2.0,
-    mouse_curve_intensity=0.3,
-    mouse_overshoot_chance=0.15,
-    
-    # Typing
-    min_typing_delay=0.05,
-    max_typing_delay=0.25,
-    typo_chance=0.02,
-    
-    # Scrolling
-    scroll_style="smooth",  # or "stepped", "mixed"
-    
-    # Pauses
-    random_pause_chance=0.1,
-    reading_speed_wpm=250,
-)
-
-with StealthBrowser(behavior_config=config) as browser:
-    # Your scraping code
-    pass
-```
-
-### Stealth Settings
-
-```python
-from stealth_scraper import StealthBrowser, StealthConfig
-
-config = StealthConfig(
-    # Anti-detection
-    use_undetected_chrome=True,
-    mask_automation_indicators=True,
-    disable_webrtc=True,
-
-    # Spoofing
-    spoof_timezone="America/New_York",
-    spoof_geolocation=(40.7128, -74.0060),
-    spoof_locale="en-US",
-
-    # Session
-    use_persistent_profile=True,
-    profile_path="/path/to/profile",
-)
-
-with StealthBrowser(stealth_config=config) as browser:
-    # Your scraping code
-    pass
-```
-
-### Identity & Location Modularity (New!)
-
-```python
-from stealth_scraper import create_stealth_browser, StealthIdentity, StealthLocation
-
-# 1. Consistent Identity (Safe for logging in)
-# Uses a deterministic seed so your "hardware" fingerprint looks the same every time
-browser = create_stealth_browser(
-    identity=StealthIdentity.CONSISTENT, 
-    identity_seed="my_google_account_1"
-)
-
-# 2. Location Context (Travel to Tokyo)
-# Auto-sets Timezone, Geolocation, Locale, and Languages
-browser = create_stealth_browser(
-    location=StealthLocation.Tokyo()
-)
-```
-
----
-
-## 🎯 API Reference
-
-### Factory Functions
-
-| Function | Description |
-|----------|-------------|
-| `create_browser_with_level(level, **overrides)` | Create browser with preset stealth level |
-| `get_stealth_config(level)` | Get preset configs for manual modification |
-| `create_stealth_browser(**kwargs)` | Create browser with custom configuration |
-
-### StealthLevel Enum
-
-```python
-StealthLevel.FAST     # Instant interactions, minimal stealth (API compatible)
-StealthLevel.LOW      # Fast, minimal stealth
-StealthLevel.MEDIUM   # Balanced (default)
-StealthLevel.HIGH     # Maximum stealth
-StealthLevel.PARANOID # Extreme stealth (slower, force headful)
-```
-
-### Identity & Location
-
-```python
-from stealth_scraper import StealthIdentity, StealthLocation
-
-# Identity Strategies
-StealthIdentity.GHOST        # Random every session (Default)
-StealthIdentity.CONSISTENT   # Consistent based on seed/profile
-
-# Location Presets
-StealthLocation.US()    # New York, en-US
-StealthLocation.UK()    # London, en-GB
-StealthLocation.Tokyo() # Tokyo, ja-JP
-```
-
-### Proxy Classes
-
-```python
-from stealth_scraper import Proxy, ProxyConfig, ProxyPool, ProxyType, RotationStrategy
-
-# Proxy types
-ProxyType.HTTP      # HTTP proxy
-ProxyType.HTTPS     # HTTPS proxy
-ProxyType.SOCKS5    # SOCKS5 proxy
-
-# Rotation strategies
-RotationStrategy.NONE        # No rotation (default)
-RotationStrategy.PER_SESSION # New proxy each browser session
-RotationStrategy.TIMED       # Rotate after interval
-RotationStrategy.ON_ERROR    # Rotate on proxy failure
-
-# Create proxy from URL
-proxy = Proxy.from_url("http://user:pass@host:8080", country="US")
-
-# ProxyConfig with geo-sync
-config = ProxyConfig(
-    enabled=True,
-    proxy=proxy,
-    sync_location=True  # Auto-set timezone/locale from proxy country
-)
-```
-
-### Headless & Fast Mode (New!)
-
-To run invisible scraping at maximum speed (API-like throughput):
-
-```python
-# The "Turbo Scraper" Pattern
-browser = create_stealth_browser(
-    level=StealthLevel.FAST,       # Teleporting mouse, instant typing
-    headless=True,                 # Invisible (--headless=new)
-    block_resources=True           # Block images/css/fonts (5x speed)
-)
-
-with browser:
-    browser.navigate("https://api-like-site.com")
-    # Interactions are instant (0ms delay)
-    browser.click() 
-```
-
-### StealthBrowser Interface
-The browser object now exposes convenience methods for direct interaction:
-
-| Method | Description |
-| :--- | :--- |
-| `navigate(url)` | Go to a URL (human-like loading). |
-| `move_to(x, y)` | Move mouse (Curve or Teleport based on level). |
-| `click()` | Click at current mouse position. |
-| `type_text(text)` | Type text with human logic (typos/delays). |
-| `save_screenshot(path)` | Save debug screenshot. |
-| `click_element(element, scroll_first)` | Human-like click with mouse movement |
-| `type_into(element, text)` | Type with realistic delays and typos |
-| `random_pause(min, max)` | Random wait between actions |
-| `simulate_reading(word_count)` | Simulate reading with scrolling |
-| `random_mouse_movement()` | Move mouse to random position |
-| `save_screenshot(path)` | Save screenshot |
-
-### Direct Simulator Access
-
-```python
-# Mouse movements
-browser.mouse.move_to(x, y, click=True)
-browser.mouse.move_to_element(element)
-
-# Scrolling
-browser.scroll.scroll_page("down", amount=0.7)
-browser.scroll.scroll_to_element(element)
-browser.scroll.scroll_to(y_position)
-
-# Typing
-browser.typing.type_text(element, "text", clear_first=True)
-
-# Advanced Behavior
-browser.simulate_window_switching() # Simulates tabbing away and back
-browser.simulate_shortcut(['Control', 't']) # Press Ctrl+T
-
-```
-
----
-
-## 🔒 Anti-Detection Techniques
-
-### Browser Fingerprint Masking
-
-```
-✅ navigator.webdriver = undefined
-✅ chrome.runtime mocked with realistic implementation
-✅ Plugins array shows PDF Plugin, Native Client
-✅ Hardware concurrency randomized (4/8/12/16 cores)
-✅ Device memory randomized (4/8/16 GB)
-✅ Canvas fingerprint noise injection
-✅ WebGL vendor/renderer spoofing (NVIDIA/Intel)
-✅ AudioContext fingerprint protection (noise injection)
-✅ Font metrics randomization (offset width/height)
-✅ Battery API spoofing
-✅ Screen resolution & window dimension synchronization
-✅ Network headers (`Accept-Language`) matched to locale
-```
-
-### Chrome Flags Applied
-
-```
---disable-blink-features=AutomationControlled
---disable-features=AutomationControlled
---disable-features=OptimizationGuideModelDownloading
---disable-webrtc
---disable-notifications
---disable-popup-blocking
-+ 30 more stealth flags
-```
-
----
-
-## 📖 Examples
-
-### Infinite Scroll Scraping
-
-```python
-with StealthBrowser() as browser:
-    browser.navigate("https://example.com/feed")
-    
-    items = []
-    for i in range(10):
-        # Collect items
-        elements = browser.driver.find_elements(By.CSS_SELECTOR, ".item")
-        items.extend([e.text for e in elements])
-        
-        # Human-like scrolling
-        browser.scroll.scroll_page("down", 0.8)
-        browser.random_pause(1.0, 3.0)
-        
-        # Occasional scroll back (humans do this)
-        if i % 3 == 0:
-            browser.scroll.scroll_page("up", 0.2)
-            browser.random_mouse_movement()
-```
-
-### Location-Based Scraping
-
-```python
-config = StealthConfig(
-    spoof_timezone="Europe/London",
-    spoof_geolocation=(51.5074, -0.1278),  # London
-    spoof_locale="en-GB",
-)
-
-with StealthBrowser(stealth_config=config) as browser:
-    browser.navigate("https://example.com/local-deals")
-    # See London-specific content
-```
-
-### Session Persistence
-
-```python
-config = StealthConfig(
-    use_persistent_profile=True,
-    profile_path="/tmp/my_session",
-)
-
-# First run: Login
-with StealthBrowser(stealth_config=config) as browser:
     browser.navigate("https://example.com/login")
-    # ... login flow ...
-
-# Second run: Already logged in!
-with StealthBrowser(stealth_config=config) as browser:
-    browser.navigate("https://example.com/dashboard")
-    # Cookies preserved, session active
 ```
 
----
+### Advanced: Proxies & Consistent Identity
 
-## 📋 Requirements
+```python
+from stealth_scraper import create_stealth_browser, StealthIdentity, Proxy
 
-- **Python** 3.8+
-- **Google Chrome** (latest version recommended)
-- **Dependencies:**
-  ```
-  selenium>=4.15.0
-  undetected-chromedriver>=3.5.0
-  fake-useragent>=1.4.0
-  numpy>=1.24.0
-  scipy>=1.11.0
-  selenium-stealth>=1.0.6
-  webdriver-manager>=4.0.0
-  ```
-
----
-
-## 📁 Package Structure
-
-```
-stealth_scraper/
-├── __init__.py          # Package exports
-├── browser.py           # StealthBrowser class
-├── config.py            # Configuration classes
-├── proxy/               # Proxy support module
-│   ├── __init__.py          # Proxy exports
-│   ├── config.py            # Proxy, ProxyConfig, ProxyPool
-│   ├── extension.py         # Chrome extension generator
-│   ├── manager.py           # ProxyManager class
-│   └── geo.py               # Geo-location sync
-├── simulators/          # Human behavior simulators
-│   ├── mouse.py             # Mouse movement
-│   ├── scroll.py            # Scrolling behavior
-│   └── keyboard.py          # Typing simulation
-└── resources/           # JS injection scripts
-
-docs/                    # Full Documentation
-├── GUIDE.md                 # Getting Started
-├── CONFIGURATION.md         # Settings Deep Dive
-├── API_REFERENCE.md         # Method Listing
-├── STEALTH_ENGINE.md        # Technical Details
-└── TROUBLESHOOTING.md       # Known Issues
-
-tests/                   # Comprehensive test suite
+# 1. Consistent "Hardware" Identity (Safe for sessions)
+# 2. Routing through a US proxy
+with create_stealth_browser(
+    identity=StealthIdentity.CONSISTENT,
+    identity_seed="my_google_account_1",
+    proxy="http://user:pass@us.proxy.com:8080"
+) as browser:
+    browser.navigate("https://whoer.net")
 ```
 
 ---
 
 ## ⚠️ Disclaimer
 
-This tool is provided for **educational and research purposes only**. Users are responsible for ensuring their use complies with:
-
-- Website Terms of Service
-- Applicable laws and regulations
-- Ethical scraping practices
-
-Always respect `robots.txt` and rate limits. Consider using official APIs when available.
+This tool is provided for **educational and research purposes only**. Users are responsible for ensuring their use complies with Website Terms of Service, applicable laws, and ethical scraping practices.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to:
-
-- Report bugs
-- Suggest features
-- Submit pull requests
-
----
+Contributions are welcome! Feel free to report bugs or submit pull requests.
 
 ## 📄 License
 
 MIT License - See [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <b>Happy Scraping! 🕷️</b>
-</p>

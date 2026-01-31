@@ -4,12 +4,18 @@ All notable changes to **Ultimate Stealth Web Scraper** will be documented in th
 
 ## [1.4.0] - 2026-01-30
 ### Added
+- **Perfect Masking**: Upgraded `navigator.webdriver` masking to be undetectable by advanced prototype checks ("Sannysoft New").
+- **UA-Sync Engine**: Implicitly synchronizes `plugins`, `platform`, and `languages` based on the spoofed User-Agent.
+- **Mobile Fidelity**: Automated mobile-device profile injection (0 plugins, Linux armv8l platform) when using a mobile User-Agent.
+- **Custom Identity**: Added `user_agent` support to `create_stealth_browser` and `StealthConfig`.
 - **Network Traffic Capture**: Passive CDP-based traffic inspection.
-  - `NetworkManager` class for managing capture lifecycle.
-  - CDP listener integration for high reliability with standard and undetected-chromedriver.
-  - Support for capturing request/response metadata and response bodies.
-  - `wait_for_request(pattern)` helper for synchronizing with dynamic API calls.
-- **Example**: Added `examples/examples_network_capture.py` demonstrating full usage.
+- **Hardening Suite**: New formal tests for Behavior Sanity, Network Capture, Proxy Rotation, and UA Consistency.
+- **Windows Cleanup**: Silenced noisy `WinError 6` tracebacks during browser teardown on Windows.
+- **Visual Improvements**: added red ripple effect for mouse clicks in `cursor.js`.
+- **Stability**: Disabled `emulate_touch` by default to prevent hangs during rapid mobile interactions.
+- **Deterministic Identity**: Implemented seeded RNG in `StealthBrowser` to guarantee consistent viewports and headers in `CONSISTENT` mode.
+- **Universal Test Suite**: Full `conftest.py` monkeypatching implies standardizing tests for both Mobile and Desktop profiles (54/54 passed).
+- **Hardening**: Fixed potential race conditions in `test_identity_spoofing.py` and `test_fingerprint_consistency.py`.
 
 ## [1.3.0] - 2026-01-29
 ### Added

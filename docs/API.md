@@ -160,9 +160,12 @@ Internal manager for proxy lifecycle (usually not used directly).
 from stealth_scraper import ProxyManager
 
 # Access via browser
-browser.proxy_manager.current_proxy
-browser.proxy_manager.get_synced_location()
+browser._proxy_manager.current_proxy
+browser._proxy_manager.get_synced_location()
 ```
+
+### `report_failure()`
+Alias for `rotate_on_error()`. Rotates to the next proxy if `ON_ERROR` strategy is active.
 
 ---
 
@@ -189,3 +192,46 @@ Retrieves the body for a specific request.
 ### `wait_for_request(url_pattern: str, timeout=10.0) -> Optional[Dict]`
 Blocks until a request matching the pattern is detected or timeout occurs.
 Returns the request event if found.
+---
+
+## UA-Sync Engine
+
+Implicit synchronization of browser environment with User-Agent.
+
+### Automatic Sync
+When `is_mobile=None` (default), the engine detects mobile status from the `user_agent`. If mobile is detected:
+- **Plugins/MimeTypes**: Set to empty (matches mobile Chrome).
+- **Platform**: Set to `Linux armv8l`.
+- **Interaction**: CDP Touch Emulation automatically enabled.
+- **Viewport**: Enforces mobile-appropriate dimensions (e.g., 390x844).
+
+### Explicit Control
+Force environment settings regardless of UA:
+- `StealthConfig(is_mobile=True)`: Force mobile environmental spoofing.
+- `StealthConfig(emulate_touch=True)`: Force touch events via CDP.
+- `StealthConfig(mask_plugins=False)`: Disable the Plugin/MimeType masking system.
+
+---
+
+## Testing Tools
+
+Professional verification tools for stealth hardening.
+
+### Parametric Device Testing
+Run the entire test suite against specific device profiles via CLI:
+
+```bash
+# Run all tests for BOTH Mobile and Desktop
+python -m pytest tests/ -v
+
+# Run only Mobile profile tests
+python -m pytest tests/ -v --browser-type mobile
+
+# Run only Desktop profile tests
+python -m pytest tests/ -v --browser-type desktop
+```
+
+### Key Stealth Tests
+- `test_ua_property_consistency`: Verifies that JS properties (Plugins, Platform, Viewport, Touch) match the UA.
+- `test_language_header_consistency`: Verifies that network headers match JS languages.
+- `test_identity_spoofing`: Verifies that location/fingerprint seeds work across device types.

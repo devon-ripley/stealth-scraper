@@ -226,6 +226,10 @@ class ProxyManager:
 
         return self.rotate()
 
+    def report_failure(self) -> Optional[Proxy]:
+        """Alias for rotate_on_error."""
+        return self.rotate_on_error()
+
     def increment_request_count(self) -> None:
         """Increment the request counter (for timed rotation tracking)."""
         self._request_count += 1

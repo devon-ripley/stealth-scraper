@@ -64,6 +64,12 @@ Controls anti-detection and fingerprint settings.
 | `disable_webrtc` | bool | True | Prevent real IP leak |
 | `spoof_timezone` | str | None | Custom timezone string |
 | `spoof_locale` | str | None | Custom locale (e.g., "ja-JP") |
+| `is_mobile` | bool | None | Force mobile/desktop. If None, auto-detected from UA. |
+| `emulate_touch` | bool | None | Enable touch interactions. Auto-detected by default. |
+| `mask_plugins` | bool | True | Toggle high-fidelity plugin/mime masking. |
+| `spoof_platform` | str | None | Manual `navigator.platform` override. |
+| `user_agent` | str | None | Custom User-Agent string. |
+| `randomize_viewport` | bool | True | Randomly select window size on launch. |
 
 ---
 
@@ -215,3 +221,44 @@ config = ProxyConfig(enabled=True, proxy=proxy, sync_location=True)
 with create_stealth_browser(proxy=config) as browser:
     browser.navigate("https://example.com")
 ```
+
+---
+
+## 🎨 Custom Stealth Levels
+
+For advanced users, you can define reusable stealth profiles by inheriting from a base level.
+
+```python
+from stealth_scraper import create_stealth_browser, StealthLevel, CustomStealthLevel
+
+# Define a "Fast but Careful" profile
+# Inherits HIGH stealth (mouse curves) but speeds it up
+MyScraperProfile = CustomStealthLevel(
+    base=StealthLevel.HIGH,
+    
+    # Overrides (Any HumanBehaviorConfig or StealthConfig field)
+    min_mouse_speed=0.1,      # Much faster mouse
+    block_resources=True,     # Block images for speed
+    typo_chance=0.0,          # No typos
+    headless=True             # Invisible
+)
+
+browser = create_stealth_browser(level=MyScraperProfile)
+```
+
+### Available Overrides
+You can override any parameter available in `HumanBehaviorConfig` or `StealthConfig`.
+
+---
+
+## ⚠️ Headless vs. Headful: The Trade-off
+
+Running `headless=True` (invisible) is convenient but comes with risks:
+
+| Configuration | Behavioral Stealth | Fingerprint Stealth | Best For |
+| :--- | :--- | :--- | :--- |
+| **High + Headful** | ⭐⭐⭐⭐⭐ (Perfect) | ⭐⭐⭐⭐⭐ (Perfect) | Paranoid sites, Login, Ticketmaster |
+| **High + Headless** | ⭐⭐⭐⭐⭐ (Perfect) | ⭐⭐⭐⭐ (Near Perfect) | Background farming, 95% of sites |
+| **Fast + Headless** | ⭐ (Bot-like) | ⭐⭐⭐⭐ (Near Perfect) | API scraping, Public data |
+
+> **Note**: Even with our advanced patching, **Headless Chrome** has subtle rendering differences (font smoothing, 3D timing) that extremely advanced trackers *can* detect. For maximum safety ("God Mode"), always use `headless=False`.

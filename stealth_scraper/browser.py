@@ -14,6 +14,17 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import undetected_chromedriver as uc
+
+# Patch undetected_chromedriver for Windows WinError 6 noise during teardown
+if platform.system() == "Windows":
+    _uc_chrome_del = uc.Chrome.__del__
+    def _patched_uc_del(self):
+        try:
+            _uc_chrome_del(self)
+        except (OSError, ImportError, AttributeError, TypeError):
+            # Silently ignore teardown handle/resource issues common on Windows/GC
+            pass
+    uc.Chrome.__del__ = _patched_uc_del
 from fake_useragent import UserAgent
 
 from .config import (
@@ -59,12 +70,22 @@ class StealthBrowser:
         """
         self.behavior_config = behavior_config or HumanBehaviorConfig()
         self.stealth_config = stealth_config or StealthConfig()
+        
+        # Initialize RNG for deterministic identity if seed provided
+        if self.stealth_config.identity_seed:
+            self._rng = random.Random(self.stealth_config.identity_seed)
+        else:
+            self._rng = random
+            
         self._proxy_manager = ProxyManager.from_input(proxy)
         self.network = None # Initialized in start()
         self.driver = None
         self.mouse: Optional[HumanMouseSimulator] = None
         self.scroll: Optional[HumanScrollSimulator] = None
         self.typing: Optional[HumanTypingSimulator] = None
+        self._is_mobile = False
+        self._current_user_agent = None
+        self._target_viewport: Optional[Tuple[int, int]] = None
 
         # Apply location sync if enabled
         if self._proxy_manager and self._proxy_manager.sync_location:
@@ -81,11 +102,39 @@ class StealthBrowser:
     def _get_stealth_options(self) -> Options:
         """Configure Chrome options for stealth."""
         options = Options()
+
+        # Determine User Agent and Mobile status FIRST so it's available for viewports
+        if self.stealth_config.user_agent:
+            user_agent = self.stealth_config.user_agent
+        else:
+            ua = UserAgent()
+            current_os = platform.system().lower()
+            user_agent = ua.chrome
+            
+        # Remove "HeadlessChrome" if present
+        user_agent = user_agent.replace("HeadlessChrome", "Chrome")
+        self._current_user_agent = user_agent
+        
+        # Determine mobility
+        if self.stealth_config.is_mobile is not None:
+            self._is_mobile = self.stealth_config.is_mobile
+        else:
+            _mobile_keywords = ["Android", "webOS", "iPhone", "iPad", "iPod", "BlackBerry", "IEMobile", "Opera Mini", "Mobile"]
+            self._is_mobile = any(k in user_agent for k in _mobile_keywords)
+
+        # Apply UA to options
+        options.add_argument(f"--user-agent={user_agent}")
         
         # Randomize viewport
         if self.stealth_config.randomize_viewport:
-            width, height = random.choice(self.stealth_config.viewport_sizes)
+            # Pick a size based on device type
+            sizes = self.stealth_config.mobile_viewport_sizes if self._is_mobile else self.stealth_config.viewport_sizes
+            width, height = self._rng.choice(sizes)
+            self._target_viewport = (width, height)
             options.add_argument(f"--window-size={width},{height}")
+        elif self.stealth_config.headless:
+             # Default headless size if not randomizing
+             options.add_argument("--window-size=1920,1080")
         
         # ========================================
         # CORE ANTI-DETECTION ARGUMENTS
@@ -151,7 +200,7 @@ class StealthBrowser:
             # Note: UC handles the main --headless flag, but we add these for robustness
             options.add_argument("--headless=new")
             options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
+            # window-size handled above in viewport section
             options.add_argument("--hide-scrollbars")
         
         # ========================================
@@ -183,25 +232,7 @@ class StealthBrowser:
         if self.stealth_config.disable_notifications:
             options.add_argument("--disable-notifications")
         
-        # ========================================
-        # USER AGENT CONFIGURATION
-        # ========================================
-        
-        # Get a realistic user agent matching the OS
-        ua = UserAgent()
-        current_os = platform.system().lower()
-        
-        if current_os == "windows":
-            user_agent = ua.chrome  # Will prioritize Windows UA
-        elif current_os == "darwin":
-            user_agent = ua.chrome
-        else:
-            user_agent = ua.chrome
-        
-        # Remove "HeadlessChrome" if present (shouldn't be with headless=False)
-        user_agent = user_agent.replace("HeadlessChrome", "Chrome")
-        options.add_argument(f"--user-agent={user_agent}")
-        self._current_user_agent = user_agent
+        # UA set at top of method
         
         # ========================================
         # LANGUAGE AND LOCALE
@@ -211,7 +242,7 @@ class StealthBrowser:
             options.add_argument(f"--lang={self.stealth_config.spoof_locale}")
         else:
             languages = ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-US,en;q=0.9,es;q=0.8"]
-            options.add_argument(f"--lang={random.choice(languages)}")
+            options.add_argument(f"--lang={self._rng.choice(languages)}")
         
         # ========================================
         # PERSISTENT PROFILE
@@ -306,6 +337,9 @@ class StealthBrowser:
             ]),
             "canvas_noise": rng.uniform(0.001, 0.005),
             "audio_noise": rng.uniform(0.0001, 0.0005),
+            "is_mobile": getattr(self, "_is_mobile", False),
+            "emulate_touch": self.stealth_config.emulate_touch if self.stealth_config.emulate_touch is not None else getattr(self, "_is_mobile", False),
+            "mask_plugins": self.stealth_config.mask_plugins
         }
 
         # Load and template the script
@@ -397,6 +431,12 @@ class StealthBrowser:
                 options=options
             )
         
+        # Enforce viewport size if specified
+        if self.driver and self._target_viewport:
+            try:
+                self.driver.set_window_size(*self._target_viewport)
+            except: pass
+
         # Apply selenium-stealth if available and enabled
         if SELENIUM_STEALTH_AVAILABLE and self.stealth_config.use_selenium_stealth:
             self._apply_selenium_stealth()
@@ -439,14 +479,17 @@ class StealthBrowser:
             languages=["en-US", "en"],
             vendor="Google Inc.",
             platform="Win32",
-            webgl_vendor=random.choice(webgl_vendors),
-            renderer=random.choice(webgl_renderers),
+            webgl_vendor=self._rng.choice(webgl_vendors),
+            renderer=self._rng.choice(webgl_renderers),
             fix_hairline=True,
             run_on_insecure_origins=False,
         )
     
     def _apply_cdp_configurations(self) -> None:
         """Apply Chrome DevTools Protocol configurations for enhanced stealth."""
+        if not self.stealth_config.mask_automation_indicators:
+            return
+
         try:
             # 1. Handle Location context (Phase 2)
             loc = self.stealth_config.location
@@ -481,18 +524,30 @@ class StealthBrowser:
             
             # Set user agent via CDP for consistency
             if hasattr(self, '_current_user_agent'):
-                # Get platform info
-                platform_info = {
-                    "windows": "Windows",
-                    "darwin": "macOS", 
-                    "linux": "Linux"
-                }.get(platform.system().lower(), "Windows")
+                # Platform sync for UA-Sync
+                if self.stealth_config.spoof_platform:
+                    platform_info = self.stealth_config.spoof_platform
+                elif getattr(self, "_is_mobile", False):
+                    platform_info = "Linux armv8l"
+                else:
+                    platform_info = {
+                        "windows": "Win32",
+                        "darwin": "MacIntel", 
+                        "linux": "Linux x86_64"
+                    }.get(platform.system().lower(), "Win32")
                 
                 # Determine acceptLanguage based on locale
-                accept_lang = "en-US,en;q=0.9"
-                if locale:
-                    # simplistic mapping, could be improved
-                    accept_lang = f"{locale},{locale.split('-')[0]};q=0.9,en-US;q=0.8,en;q=0.7"
+                langs = [locale] if locale else ["en-US"]
+                if locale and '-' in locale:
+                    base_lang = locale.split('-')[0]
+                    if base_lang not in langs:
+                        langs.append(base_lang)
+                if 'en-US' not in langs:
+                    langs.append('en-US')
+                if 'en' not in langs:
+                    langs.append('en')
+                
+                accept_lang = ",".join([f"{l};q=0.9" if i > 0 else l for i, l in enumerate(langs)])
 
                 self.driver.execute_cdp_cmd(
                     "Emulation.setUserAgentOverride",
@@ -503,39 +558,66 @@ class StealthBrowser:
                     }
                 )
             
+            # Ensure langs is defined even if UA setup above was skipped (unlikely)
+            if 'langs' not in locals():
+                langs = [locale] if locale else ["en-US", "en"]
+            
             # Additional script to ensure navigator.language/languages are consistent
-            if locale:
-                langs = [locale]
-                if '-' in locale:
-                    langs.append(locale.split('-')[0])
-                if 'en-US' not in langs:
-                    langs.append('en-US')
-                
-                self.driver.execute_cdp_cmd(
-                    "Page.addScriptToEvaluateOnNewDocument",
-                    {
-                        "source": f"""
-                            Object.defineProperty(navigator, 'language', {{
-                                get: () => '{locale}'
-                            }});
-                            Object.defineProperty(navigator, 'languages', {{
-                                get: () => {json.dumps(langs)}
-                            }});
-                        """
-                    }
-                )
+            locale_str = locale or (langs[0] if langs else "en-US")
+            self.driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {
+                    "source": f"""
+                        Object.defineProperty(navigator, 'language', {{
+                            get: () => '{locale_str}'
+                        }});
+                        Object.defineProperty(navigator, 'languages', {{
+                            get: () => {json.dumps(langs)}
+                        }});
+                    """
+                }
+            )
 
-            # Disable webdriver flag via CDP
+            # Deeply mask navigator.webdriver to bypass 'Sannysoft (New)' detection
             self.driver.execute_cdp_cmd(
                 "Page.addScriptToEvaluateOnNewDocument",
                 {
                     "source": """
-                        Object.defineProperty(navigator, 'webdriver', {
-                            get: () => undefined
-                        });
+                        (function() {
+                            const newProto = Object.getPrototypeOf(navigator);
+                            if (Object.getOwnPropertyDescriptor(newProto, 'webdriver')) {
+                                delete newProto.webdriver;
+                            }
+                            Object.defineProperty(newProto, 'webdriver', {
+                                get: () => false,
+                                enumerable: true,
+                                configurable: true
+                            });
+                            
+                            if (Object.getOwnPropertyDescriptor(navigator, 'webdriver')) {
+                                delete navigator.webdriver;
+                            }
+                        })();
                     """
                 }
             )
+
+            # Touch Emulation for Mobile (Phase 4)
+            emulate_touch = self.stealth_config.emulate_touch
+            if emulate_touch is None:
+                emulate_touch = getattr(self, "_is_mobile", False)
+
+            if emulate_touch:
+                try:
+                    self.driver.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {
+                        "enabled": True,
+                        "configuration": "mobile"
+                    })
+                    self.driver.execute_cdp_cmd("Emulation.setEmitTouchEventsForMouse", {
+                        "enabled": True,
+                        "configuration": "mobile"
+                    })
+                except: pass
             
         except Exception as e:
             # CDP commands may fail on some browser versions, continue anyway
@@ -824,6 +906,7 @@ def create_stealth_browser(
     headless: Optional[bool] = None,
     block_resources: Optional[bool] = None,
     proxy: Optional[ProxyInput] = None,
+    user_agent: Optional[str] = None,
     **kwargs
 ) -> StealthBrowser:
     """
@@ -850,6 +933,9 @@ def create_stealth_browser(
     if location is not None:
         stealth.location = location
 
+    if user_agent is not None:
+        stealth.user_agent = user_agent
+        
     if headless is not None:
         stealth.headless = headless
 
@@ -946,6 +1032,7 @@ def get_stealth_config(level: Union[StealthLevel, CustomStealthLevel]) -> Tuple[
         )
         stealth = StealthConfig(
             use_undetected_chrome=True,
+            mask_automation_indicators=True,
             min_page_load_wait=1.0,
             max_page_load_wait=3.0,
         )

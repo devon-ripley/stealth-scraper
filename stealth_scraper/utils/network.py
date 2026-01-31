@@ -81,11 +81,14 @@ class NetworkManager:
             print(f"Warning: Failed to enable Network domain: {e}")
 
     def stop_capture(self):
-        """Stop capturing network traffic."""
+        """Stop capturing network traffic and clear buffers."""
         if not self.is_capturing:
             return
             
         self.is_capturing = False
+        with self._lock:
+            self._events = []
+            
         try:
             self.driver.execute_cdp_cmd("Network.disable", {})
         except Exception:
