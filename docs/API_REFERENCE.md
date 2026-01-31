@@ -163,3 +163,29 @@ from stealth_scraper import ProxyManager
 browser.proxy_manager.current_proxy
 browser.proxy_manager.get_synced_location()
 ```
+
+---
+
+## NetworkManager
+
+Accessible via `browser.network`. Manages passive CDP-based traffic capture.
+
+### `start_capture(capture_body=False, max_body_size=1048576)`
+Starts capturing network events.
+- `capture_body`: If `True`, enables response body buffering (required for `get_response_body`).
+- `max_body_size`: Maximum payload size to buffer (default 1MB).
+
+### `stop_capture()`
+Disables the network domain and stops capturing.
+
+### `get_traffic() -> List[Dict]`
+Returns a list of all captured network events since the start of the session.
+Each event is a dictionary containing `method` (e.g., `Network.requestWillBeSent`), `params` (full CDP event data), and `timestamp`.
+
+### `get_response_body(request_id: str) -> Optional[str]`
+Retrieves the body for a specific request. 
+**Note**: Requires `capture_body=True` in `start_capture()`.
+
+### `wait_for_request(url_pattern: str, timeout=10.0) -> Optional[Dict]`
+Blocks until a request matching the pattern is detected or timeout occurs.
+Returns the request event if found.

@@ -24,7 +24,10 @@ from .proxy import Proxy, ProxyConfig, ProxyManager
 from .proxy.config import ProxyInput
 from .simulators.mouse import HumanMouseSimulator
 from .simulators.scroll import HumanScrollSimulator
+from .simulators.mouse import HumanMouseSimulator
+from .simulators.scroll import HumanScrollSimulator
 from .simulators.keyboard import HumanTypingSimulator
+from .utils.network import NetworkManager
 
 # Optional selenium-stealth import
 try:
@@ -57,6 +60,7 @@ class StealthBrowser:
         self.behavior_config = behavior_config or HumanBehaviorConfig()
         self.stealth_config = stealth_config or StealthConfig()
         self._proxy_manager = ProxyManager.from_input(proxy)
+        self.network = None # Initialized in start()
         self.driver = None
         self.mouse: Optional[HumanMouseSimulator] = None
         self.scroll: Optional[HumanScrollSimulator] = None
@@ -275,6 +279,10 @@ class StealthBrowser:
         }
         options.add_experimental_option("prefs", prefs)
         
+        # Capability for performance logging (Network Capture)
+        # Note: For UC, we need to ensure this is passed correctly
+        options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+        
         return options
     
     def _inject_stealth_scripts(self) -> None:
@@ -352,11 +360,19 @@ class StealthBrowser:
                 driver_path = ChromeDriverManager().install()
                 
                 # Initialize the driver
+                # Initialize the driver
+                # UC handles options differently, sometimes overwriting caps.
+                # We need to ensure logging prefs are set.
+                # Force entry into capabilities dictionary
+                options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+                
+                # Create driver with specific service creation if needed, but standard init first
                 self.driver = uc.Chrome(
                     options=options,
                     headless=self.stealth_config.headless, 
                     use_subprocess=True,
                     driver_executable_path=driver_path,
+                    enable_cdp_events=True,
                 )
                 
                 # Execute CDP commands AFTER driver creation
@@ -400,6 +416,9 @@ class StealthBrowser:
         self.mouse = HumanMouseSimulator(self.driver, self.behavior_config)
         self.scroll = HumanScrollSimulator(self.driver, self.behavior_config)
         self.typing = HumanTypingSimulator(self.driver, self.behavior_config)
+        
+        # Initialize Network Manager
+        self.network = NetworkManager(self.driver)
         
         return self
     

@@ -150,4 +150,23 @@ for i in range(3):
         browser.navigate("https://httpbin.org/ip")
         print(f"Session {i+1}: {browser.proxy_manager.current_proxy}")
     config.rotate()  # Move to next proxy
+
+### 5. Network Traffic Capture
+Use CDP listeners to inspect traffic without detectable proxies.
+
+```python
+with create_stealth_browser() as browser:
+    # Capturing bodies is optional and carries higher overhead
+    browser.network.start_capture(capture_body=True)
+    
+    browser.navigate("https://httpbin.org/json")
+    
+    # Block and wait for a specific request to trigger
+    api_request = browser.network.wait_for_request("httpbin.org/json")
+    
+    if api_request:
+        req_id = api_request["params"]["requestId"]
+        body = browser.network.get_response_body(req_id)
+        print(f"Captured JSON response: {body}")
+```
 ```

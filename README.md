@@ -32,6 +32,7 @@ A powerful Python package that combines advanced anti-detection techniques with 
 | **Network Stealth** | Synchronizes `Accept-Language` headers with spoofed locale |
 | **Advanced Masking** | Spoofs Font metrics, AudioContext data, and WebGL parameters |
 | **Proxy Support** | HTTP/HTTPS/SOCKS5 with auth, rotation, and geo-location sync |
+| **Network Capture** | Passive CDP logging for traffic inspection (Request/Response/Body) |
 
 ### 🎭 Human Behavior Simulation
 
@@ -153,6 +154,29 @@ config = ProxyConfig(enabled=True, proxy=proxy, sync_location=True)
 
 with create_stealth_browser(proxy=config) as browser:
     browser.navigate("https://example.com")
+```
+
+### 📡 Network Traffic Capture (New!)
+
+Capture network requests, responses, and payload bodies without detectable MITM proxies:
+
+```python
+with create_stealth_browser() as browser:
+    # 1. Start capturing (passive CDP listeners)
+    browser.network.start_capture(capture_body=True)
+    
+    browser.navigate("https://httpbin.org/json")
+    
+    # 2. Wait for specific requests
+    browser.network.wait_for_request("httpbin.org/json")
+    
+    # 3. Inspect traffic
+    traffic = browser.network.get_traffic()
+    for event in traffic:
+        if event["method"] == "Network.responseReceived":
+            req_id = event["params"]["requestId"]
+            body = browser.network.get_response_body(req_id)
+            print(f"Captured Body: {body[:100]}...")
 ```
 
 ### Stealth Level Comparison

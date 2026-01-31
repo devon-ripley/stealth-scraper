@@ -4,11 +4,11 @@ from enum import Enum
 
 class StealthLevel(Enum):
     """Preset stealth levels for easy configuration."""
-    FAST = "fast"        # Instant interactions, minimal stealth (API compatible)
     LOW = "low"          # Fast, minimal stealth - basic anti-detection only
     MEDIUM = "medium"    # Balanced - good stealth with reasonable speed
-    HIGH = "high"        # High level of stealth - slower but very human-like
-    PARANOID = "paranoid"  # Most extream stealth - very slow but most human-like
+    HIGH = "high"        # Maximum stealth - slower but most human-like
+    PARANOID = "paranoid"  # Alias for HIGH
+    FAST = "fast"        # Instant interactions, minimal stealth (API compatible)
 
 
 @dataclass
@@ -124,7 +124,7 @@ class StealthConfig:
 class CustomStealthLevel:
     """
     A custom stealth level allowing granular overrides.
-
+    
     Args:
         base: The base StealthLevel to inherit from (e.g. MEDIUM).
         **overrides: Any parameter from HumanBehaviorConfig or StealthConfig.
@@ -132,3 +132,15 @@ class CustomStealthLevel:
     def __init__(self, base: StealthLevel, **overrides):
         self.base = base
         self.overrides = overrides
+
+
+@dataclass
+class ProxyConfig:
+    """Configuration for proxy settings."""
+    host: str
+    port: int
+    username: Optional[str] = None
+    password: Optional[str] = None
+    protocol: str = "http"  # http, https, socks4, socks5
+    auto_sync_location: bool = True  # Automatically update StealthLocation based on proxy IP
+    rotation_strategy: str = "sticky"  # sticky, random

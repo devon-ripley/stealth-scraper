@@ -2,6 +2,15 @@
 
 All notable changes to **Ultimate Stealth Web Scraper** will be documented in this file.
 
+## [1.4.0] - 2026-01-30
+### Added
+- **Network Traffic Capture**: Passive CDP-based traffic inspection.
+  - `NetworkManager` class for managing capture lifecycle.
+  - CDP listener integration for high reliability with standard and undetected-chromedriver.
+  - Support for capturing request/response metadata and response bodies.
+  - `wait_for_request(pattern)` helper for synchronizing with dynamic API calls.
+- **Example**: Added `examples/examples_network_capture.py` demonstrating full usage.
+
 ## [1.3.0] - 2026-01-29
 ### Added
 - **Proxy Support**: Comprehensive proxy module with rotation and geo-sync.
