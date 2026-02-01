@@ -183,21 +183,53 @@ with create_stealth_browser(
     browser.navigate("https://sannysoft.com/proxy")
 ```
 
-#### Explicit Mobile Control
+#### explicit Mobile Control
 You can force mobile behavior or customize interaction modes using `StealthConfig`:
 
 ```python
 from stealth_scraper import create_stealth_browser, StealthConfig
 
 config = StealthConfig(
-    is_mobile=True,        # Forces 0 plugins & Linux platform
-    emulate_touch=True,    # Converts mouse movements to Touch events
+    is_mobile=True,        # Forces 0 plugins & Linux platform & Touch Emulation
     spoof_platform="iPhone" # Manual platform override
 )
 
 with create_stealth_browser(stealth_config=config) as browser:
-    browser.navigate("https://example.com")
+    browser.scroll.scroll_to(2000) # Uses Touch Events (Swipe)
+    btn = browser.find_element(By.ID, "submit")
+    browser.click_element(btn)     # Uses Touch Events (Tap)
 ```
 
-> [!TIP]
-> Use `emulate_touch=True` even on Desktop User-Agents if you want to scrape sites designed for touch interfaces or tablets without detection.
+> **Note on Mobile Interactions**: When using a Mobile User-Agent or `is_mobile=True`:
+> - **No Mouse Emulation**: The `browser.mouse` moves will generally be bypassed. Visual cursors are disabled.
+> - **Touch Events**: `scroll_to`, `scroll_page`, and `click_element` automatically use authentic `touchstart` / `touchmove` / `touchend` sequences (swipes and taps) instead of mouse inputs.
+
+---
+
+## 🧪 Running Tests
+
+If you are contributing to functionality or just want to verify your installation, you can run the included test suite.
+
+### 1. Install Dev Requirements
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### 2. Run Tests
+
+Run all tests:
+```bash
+python -m pytest
+```
+
+Run specific browser types:
+```bash
+python -m pytest --browser-type=desktop
+python -m pytest --browser-type=mobile
+```
+
+Run a specific test file:
+```bash
+python -m pytest tests/test_local_mechanics.py
+```

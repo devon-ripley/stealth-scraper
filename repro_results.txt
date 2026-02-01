@@ -1,0 +1,33 @@
+--- RUNNING: test_visual_mouse_present[mobile] ---
+Checking HTTP: https://example.com
+FILE Result: FAILURE (Element NOT found)
+HTTP Result: FAILURE (Element NOT found) - Attempting manual injection...
+HTTP Result: Manual Injection SUCCESS
+Checking FILE: file:///E:\repos\stealth-scraper\tests/test_page.html
+FILE Result: FAILURE (Element NOT found)
+--- RUNNING: test_visual_mouse_present[desktop] ---
+Checking HTTP: https://example.com
+HTTP Result: FAILURE (Element NOT found) - Attempting manual injection...
+HTTP Result: Manual Injection SUCCESS
+Checking FILE: file:///E:\repos\stealth-scraper\tests/test_page.html
+FILE Result: FAILURE (Element NOT found)
+--- RUNNING: test_visual_mouse_present[mobile] ---
+Checking HTTP: https://example.com
+HTTP Result: FAILURE (Element NOT found)
+Checking FILE: file:///E:\repos\stealth-scraper\tests/test_page.html
+FILE Result: FAILURE (Element NOT found)
+--- RUNNING: test_visual_mouse_present[desktop] ---
+Checking HTTP: https://example.com
+HTTP Result: FAILURE (Element NOT found)
+Checking FILE: file:///E:\repos\stealth-scraper\tests/test_page.html
+--- RUNNING: test_visual_mouse_present[mobile] ---
+Checking HTTP: https://example.com
+FILE Result: FAILURE (Element NOT found)
+HTTP Result: SUCCESS (Element found)
+Checking FILE: file:///E:\repos\stealth-scraper\tests/test_page.html
+FILE Result: SUCCESS (Element found)
+--- RUNNING: test_visual_mouse_present[desktop] ---
+Checking HTTP: https://example.com
+HTTP Result: SUCCESS (Element found)
+Checking FILE: file:///E:\repos\stealth-scraper\tests/test_page.html
+FILE Result: SUCCESS (Element found)

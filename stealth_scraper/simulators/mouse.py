@@ -11,7 +11,15 @@ class HumanMouseSimulator:
     def __init__(self, driver: webdriver.Chrome, config: HumanBehaviorConfig):
         self.driver = driver
         self.config = config
-        self.current_pos = (0, 0)
+        
+        # Initialize at random position within viewport
+        try:
+            viewport = self.driver.execute_script("return [window.innerWidth, window.innerHeight];")
+            max_x, max_y = viewport[0] - 1, viewport[1] - 1
+            self.current_pos = (random.randint(0, max_x), random.randint(0, max_y))
+        except:
+            # Fallback if driver not ready or script fails
+            self.current_pos = (random.randint(0, 1920), random.randint(0, 1080))
     
     def _add_jitter(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """Add small random jitter to mouse path."""

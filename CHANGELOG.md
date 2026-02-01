@@ -2,6 +2,18 @@
 
 All notable changes to **Ultimate Stealth Web Scraper** will be documented in this file.
 
+## [1.4.2] - 2026-02-01
+### Added
+- **True Mobile Emulation**: Implemented genuine Touch Events (`touchstart`, `touchmove`, `touchend`) for scrolling and tapping on mobile configurations.
+  - Replaces mouse interactions on mobile (no more mouse cursors or hover events).
+  - Supports pull-to-scroll swipe gestures.
+- **Random Mouse Initialization**: Mouse cursor now starts at a random viewport position instead of (0,0) to reduce bot detection.
+- **Mouse Persistence**: Visual cursor position is now preserved across page navigations, improving session realism.
+
+### Fixed
+- **Visual Cursor Bug**: Fixed regression where visual cursor would disappear on page navigation or reload.
+- **Mobile Fidelity**: Removed visual mouse cursor entirely when running in mobile mode.
+
 ## [1.4.1] - 2026-01-31
 ### Fixed
 - **GHOST Mode Fingerprinting**: Fixed fingerprint randomization to produce unique hardware profiles (concurrency/memory) on each browser instance.

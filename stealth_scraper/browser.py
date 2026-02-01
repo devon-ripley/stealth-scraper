@@ -416,6 +416,10 @@ class StealthBrowser:
         if not cursor_js:
             return
 
+        # Do not inject mouse visualizer on mobile devices
+        if getattr(self, "_is_mobile", False):
+            return
+
         try:
             self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
                 "source": cursor_js
@@ -504,9 +508,18 @@ class StealthBrowser:
 
         # Initialize simulators
         self.mouse = HumanMouseSimulator(self.driver, self.behavior_config)
-        self.scroll = HumanScrollSimulator(self.driver, self.behavior_config)
+        self.scroll = HumanScrollSimulator(self.driver, self.behavior_config, is_mobile=self._is_mobile)
         self.typing = HumanTypingSimulator(self.driver, self.behavior_config)
-
+        
+        # Initial mouse sync for visualization
+        # Skip for mobile - mouse should not exist/be active
+        if self.stealth_config.visualize_mouse and self.mouse and not self._is_mobile:
+             x, y = self.mouse.current_pos
+             if x != 0 or y != 0:
+                 try:
+                     self.mouse._cdp_move(x, y)
+                 except: pass
+        
         # Initialize Network Manager
         self.network = NetworkManager(self.driver)
 
@@ -567,20 +580,7 @@ class StealthBrowser:
              # Heuristic detection
              mobile_keywords = ['Android', 'iPhone', 'iPad', 'Mobile']
              self._is_mobile = any(k in self._current_user_agent for k in mobile_keywords)
-        
-        # Inject mouse visualizer if requested
-        if self.stealth_config.visualize_mouse:
-            self._inject_cursor_visualizer()
-        
-        # Initialize simulators
-        self.mouse = HumanMouseSimulator(self.driver, self.behavior_config)
-        self.scroll = HumanScrollSimulator(self.driver, self.behavior_config)
-        self.typing = HumanTypingSimulator(self.driver, self.behavior_config)
-        
-        # Initialize Network Manager
-        self.network = NetworkManager(self.driver)
-        
-        return self
+
     
     def _apply_selenium_stealth(self) -> None:
         """Apply selenium-stealth library configurations."""
@@ -798,6 +798,23 @@ class StealthBrowser:
                 pass
 
         self.driver.get(url)
+        
+        # Inject visual cursor fallback mechanism
+        if self.stealth_config.visualize_mouse:
+            try:
+                cursor_js = self._load_script("cursor.js")
+                if cursor_js:
+                    self.driver.execute_script(cursor_js)
+                    
+                    # Re-sync visual cursor to last known internal position
+                    # This ensures the mouse doesn't visually reset to (0,0) on new page load
+                    if self.mouse:
+                        x, y = self.mouse.current_pos
+                        # Use immediate CDP move to snap visual cursor without path generation
+                        self.mouse._cdp_move(x, y)
+            except:
+                pass
+
         # Random post-load wait
         time.sleep(random.uniform(
             self.stealth_config.min_page_load_wait,
@@ -853,7 +870,39 @@ class StealthBrowser:
             self.scroll.scroll_to_element(element)
             self.random_pause()
         
-        self.mouse.move_to_element(element, click=True)
+        if self._is_mobile:
+            self._touch_tap(element)
+        else:
+            self.mouse.move_to_element(element, click=True)
+
+    def _touch_tap(self, element) -> None:
+        """Perform a touch tap on an element (Mobile)."""
+        # Get element center coordinates
+        rect = self.driver.execute_script("return arguments[0].getBoundingClientRect();", element)
+        x = rect['left'] + (rect['width'] / 2)
+        y = rect['top'] + (rect['height'] / 2)
+        
+        # Add slight randomness
+        x += random.randint(-5, 5)
+        y += random.randint(-5, 5)
+
+        try:
+             # Touch Start
+            self.driver.execute_cdp_cmd("Input.dispatchTouchEvent", {
+                "type": "touchStart", 
+                "touchPoints": [{"x": x, "y": y}]
+            })
+            time.sleep(random.uniform(0.05, 0.15))
+            
+            # Touch End
+            self.driver.execute_cdp_cmd("Input.dispatchTouchEvent", {
+                "type": "touchEnd", 
+                "touchPoints": []
+            })
+        except:
+             # Fallback to standard click if CDP tap fails
+             element.click()
+
     
     def type_into(self, element, text: str, scroll_first: bool = True) -> None:
         """Type into an element with human-like behavior."""
@@ -861,7 +910,12 @@ class StealthBrowser:
             self.scroll.scroll_to_element(element)
             self.random_pause()
         
-        self.mouse.move_to_element(element, click=True)
+        # If mobile, tap to focus instead of mouse move
+        if self._is_mobile:
+            self._touch_tap(element)
+        else:
+            self.mouse.move_to_element(element, click=True)
+
         self.random_pause(0.2, 0.5)
         self.typing.type_text(element, text)
     
@@ -878,7 +932,8 @@ class StealthBrowser:
             pause_time += random.uniform(extra_min, extra_max)
         
         # Idle entropy: Occasionally drift the mouse during long pauses
-        if pause_time > 1.0 and random.random() < 0.3:
+        # Only on Desktop
+        if not self._is_mobile and pause_time > 1.0 and random.random() < 0.3:
             try:
                 drift_x = self.mouse.current_pos[0] + random.randint(-15, 15)
                 drift_y = self.mouse.current_pos[1] + random.randint(-15, 15)

@@ -100,6 +100,32 @@ This tool is provided for **educational and research purposes only**. Users are 
 
 ---
 
+## 🧪 Testing
+
+To run the test suite, first install the development dependencies:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Then run pytest:
+
+```bash
+python -m pytest
+```
+
+You can also run specific tests:
+
+```bash
+# Run only desktop tests
+python -m pytest --browser-type=desktop
+
+# Run only mobile tests
+python -m pytest --browser-type=mobile
+```
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Feel free to report bugs or submit pull requests.
